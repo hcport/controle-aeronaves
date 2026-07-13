@@ -1209,7 +1209,7 @@ legend {
   background: rgba(255, 255, 255, 0.72);
   border-bottom: 1px solid rgba(216, 224, 226, 0.78);
   display: grid;
-  grid-template-columns: 35px minmax(0, 1fr);
+  grid-template-columns: 48px minmax(0, 1fr);
   min-height: 27px;
 }
 
@@ -1222,11 +1222,11 @@ legend {
   align-items: center;
   color: #45565a;
   display: flex;
-  font-size: 0.62rem;
+  font-size: 0.66rem;
   font-weight: 900;
   justify-content: center;
   overflow: hidden;
-  padding: 0 2px;
+  padding: 0 4px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

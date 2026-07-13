@@ -1345,6 +1345,7 @@ function renderCalendar() {
   const cells = days.map((date) => {
     const iso = toIsoDate(date);
     const dateStateClass = iso === todayIso ? "today" : iso < todayIso ? "past-day" : "";
+    const showAircraftLabels = date.getDay() === 0;
     const pendingByAircraft = pendingMissionSlotsForDate(visibleMissions, plannerAircraft, iso);
     const lanes = plannerAircraft.map((aircraft) => {
       const unavailability = aircraftUnavailabilityForDate(aircraft.id, iso);
@@ -1361,7 +1362,7 @@ function renderCalendar() {
             : "";
       return `
         <div class="planner-aircraft-row ${rowClass}" title="${escapeHtml(aircraft.number)}${down ? " baixada" : ""}">
-          <span class="planner-aircraft-label">${escapeHtml(aircraft.number)}</span>
+          <span class="planner-aircraft-label">${showAircraftLabels ? escapeHtml(aircraft.number) : ""}</span>
           <div class="planner-aircraft-slot">${block}</div>
         </div>
       `;
