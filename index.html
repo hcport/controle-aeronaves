@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Planner de Aeronaves e Missões</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <h1>Planner de Aeronaves e Missões</h1>
+          <p>Controle mensal de disponibilidade, missões e previsão de aeronaves.</p>
+        </div>
+        <div class="topbar-actions">
+          <button class="secondary-button" id="exportBackupButton" type="button">Exportar JSON</button>
+          <label class="secondary-button file-button" for="importBackupInput">Importar JSON</label>
+          <input id="importBackupInput" type="file" accept="application/json,.json" hidden />
+        </div>
+      </header>
+
+      <nav class="tabs" aria-label="Telas do app">
+        <button class="tab-button active" type="button" data-view="dashboardView">Dashboard</button>
+        <button class="tab-button" type="button" data-view="plannerView">Planner</button>
+        <button class="tab-button" type="button" data-view="missionsView">Missões</button>
+        <button class="tab-button" type="button" data-view="aircraftView">Aeronaves</button>
+        <button class="tab-button" type="button" data-view="importView">Importação</button>
+      </nav>
+
+      <main>
+        <section class="view active" id="dashboardView">
+          <div class="section-toolbar">
+            <div>
+              <h2>Dashboard</h2>
+              <p>Visão rápida de disponibilidade, missões da semana e alertas essenciais.</p>
+            </div>
+            <label class="check-row cancelled-toggle"><input id="showDashboardCancelled" type="checkbox" checked /> Mostrar canceladas</label>
+          </div>
+
+          <div class="dashboard-quick-actions">
+            <button class="primary-button" id="dashboardNewMissionButton" type="button">Nova missão</button>
+            <button class="secondary-button" id="dashboardNewAircraftButton" type="button">Nova aeronave</button>
+            <button class="secondary-button" id="dashboardImportPdfButton" type="button">Importar O Frag / OMA</button>
+            <button class="secondary-button" id="dashboardOpenPlannerButton" type="button">Abrir planner mensal</button>
+          </div>
+
+          <section class="dashboard-availability-strip" id="dashboardAircraftAvailability" role="button" tabindex="0">
+            <strong>AERONAVES</strong>
+            <div id="dashboardAircraftSummary"></div>
+            <button class="secondary-button" id="dashboardOpenAircraftButton" type="button">Ver aeronaves</button>
+          </section>
+
+          <div class="dashboard-week-controls">
+            <button class="icon-button" id="dashboardPreviousWeekButton" type="button" aria-label="Semana anterior">‹</button>
+            <button class="secondary-button" id="dashboardTodayButton" type="button">Hoje</button>
+            <button class="icon-button" id="dashboardNextWeekButton" type="button" aria-label="Semana seguinte">›</button>
+            <div class="dashboard-alert-compact" id="dashboardAlertCompact"></div>
+          </div>
+
+          <section class="dashboard-timeline-panel">
+            <div class="dashboard-timeline-heading">
+              <div>
+                <h2>SEMANA ATUAL</h2>
+                <p id="dashboardCurrentWeekTitle"></p>
+              </div>
+              <div class="dashboard-timeline-actions">
+                <button class="ghost-button" id="toggleCurrentWeekLanesButton" type="button"></button>
+                <button class="secondary-button" type="button" onclick="showView('plannerView')">Ver no planner</button>
+              </div>
+            </div>
+            <div class="weekly-timeline" id="dashboardCurrentWeekTimeline"></div>
+          </section>
+
+          <section class="dashboard-timeline-panel">
+            <div class="dashboard-timeline-heading">
+              <div>
+                <h2>PRÓXIMA SEMANA</h2>
+                <p id="dashboardNextWeekTitle"></p>
+              </div>
+              <div class="dashboard-timeline-actions">
+                <button class="ghost-button" id="toggleNextWeekLanesButton" type="button"></button>
+                <button class="secondary-button" type="button" onclick="showView('plannerView')">Ver no planner</button>
+              </div>
+            </div>
+            <div class="weekly-timeline" id="dashboardNextWeekTimeline"></div>
+          </section>
+        </section>
+
+        <section class="view" id="plannerView">
+          <div class="section-toolbar">
+            <div>
+              <h2>Calendário mensal</h2>
+              <p id="plannerSummary">Missões previstas no período.</p>
+            </div>
+            <div class="month-controls">
+              <label class="check-row cancelled-toggle"><input id="showCancelledMissions" type="checkbox" checked /> Mostrar canceladas</label>
+              <button class="icon-button" id="previousMonthButton" type="button" aria-label="Mês anterior">‹</button>
+              <strong id="currentMonthLabel"></strong>
+              <button class="icon-button" id="nextMonthButton" type="button" aria-label="Próximo mês">›</button>
+            </div>
+          </div>
+          <div class="calendar" id="calendar"></div>
+
+          <div class="section-toolbar table-heading">
+            <div>
+              <h2>Tabela de missões</h2>
+              <p>Lista ordenada por data inicial.</p>
+            </div>
+            <button class="primary-button" id="newMissionFromPlannerButton" type="button">Nova missão</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Data inicial</th>
+                  <th>Data final</th>
+                  <th>Missão</th>
+                  <th>Local</th>
+                  <th>Tipo</th>
+                  <th>Demanda de aeronaves</th>
+                  <th>HDV missão</th>
+                  <th>Detalhes</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="missionsTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="view" id="missionsView">
+          <div class="grid-layout">
+            <form class="panel" id="missionForm">
+              <div class="form-heading">
+                <h2 id="missionFormTitle">Cadastrar missão</h2>
+                <button class="ghost-button" id="clearMissionFormButton" type="button">Limpar</button>
+              </div>
+              <input id="missionId" type="hidden" />
+              <label>Nome da missão<input id="missionName" required /></label>
+              <div class="two-columns">
+                <label>Data inicial<input id="missionStart" type="date" required /></label>
+                <label>Data final<input id="missionEnd" type="date" required /></label>
+              </div>
+              <label>Local<input id="missionLocation" /></label>
+              <div class="two-columns">
+                <label>Tipo de voo
+                  <select id="missionFlightType">
+                    <option value="VFR">VFR</option>
+                    <option value="IFR">IFR</option>
+                    <option value="OVN">OVN</option>
+                  </select>
+                </label>
+                <label>Quantidade de aeronaves
+                  <input id="missionAircraftCount" min="1" type="number" value="1" />
+                </label>
+              </div>
+              <label>HDV disponível para a missão
+                <input id="missionFlightHours" inputmode="decimal" placeholder="Ex.: 3.5, 05, 12.5 ou 12:00" />
+              </label>
+              <fieldset>
+                <legend>Requisitos especiais</legend>
+                <label class="check-row"><input id="missionRequiresArm" type="checkbox" /> Braço de armamento aéreo</label>
+                <label class="check-row"><input id="missionRequiresWinch" type="checkbox" /> Guincho</label>
+                <label class="check-row"><input id="missionRequiresHook" type="checkbox" /> Gancho</label>
+              </fieldset>
+              <div>
+                <div class="inline-label">
+                  <strong>Aeronaves selecionadas</strong>
+                  <span id="availableAircraftHint"></span>
+                </div>
+                <div class="aircraft-slots" id="aircraftSlots"></div>
+              </div>
+              <label>Detalhes/observações<textarea id="missionDetails" rows="4"></textarea></label>
+              <button class="primary-button" type="submit">Salvar missão</button>
+            </form>
+
+            <div class="panel">
+              <div class="form-heading">
+                <h2>Missões cadastradas</h2>
+                <button class="secondary-button" id="openTextImportButton" type="button">Incluir por texto</button>
+              </div>
+              <div class="mission-filter" role="group" aria-label="Filtrar missões">
+                <button class="filter-button active" type="button" data-mission-filter="all">Todas</button>
+                <button class="filter-button" type="button" data-mission-filter="planned">Ativas</button>
+                <button class="filter-button" type="button" data-mission-filter="cancelled">Canceladas</button>
+              </div>
+              <div class="list" id="missionsList"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="aircraftView">
+          <div class="grid-layout">
+            <form class="panel" id="aircraftForm">
+              <div class="form-heading">
+                <h2 id="aircraftFormTitle">Cadastrar aeronave</h2>
+                <button class="ghost-button" id="clearAircraftFormButton" type="button">Limpar</button>
+              </div>
+              <input id="aircraftId" type="hidden" />
+              <label>Numeral da aeronave<input id="aircraftNumber" required /></label>
+              <label>Situação
+                <select id="aircraftStatus">
+                  <option value="up">Em cima</option>
+                  <option value="down">Baixada</option>
+                </select>
+              </label>
+              <fieldset>
+                <legend>Capacidades</legend>
+                <label class="check-row"><input id="aircraftVfr" type="checkbox" /> VFR</label>
+                <label class="check-row"><input id="aircraftIfr" type="checkbox" /> IFR</label>
+                <label class="check-row"><input id="aircraftOvn" type="checkbox" /> OVN</label>
+                <label class="check-row"><input id="aircraftArm" type="checkbox" /> Braço de armamento aéreo</label>
+                <label class="check-row"><input id="aircraftWinch" type="checkbox" /> Guincho</label>
+                <label class="check-row"><input id="aircraftHook" type="checkbox" /> Gancho</label>
+              </fieldset>
+              <label>HDV disponível<input id="aircraftHdv" placeholder="Ex.: 12h30, 40 horas ou 18:00" /></label>
+              <label>Detalhes/observações<textarea id="aircraftDetails" rows="4"></textarea></label>
+              <button class="primary-button" type="submit">Salvar aeronave</button>
+            </form>
+
+            <div class="panel">
+              <h2>Aeronaves cadastradas</h2>
+              <div class="list" id="aircraftList"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="importView">
+          <div class="grid-layout">
+            <div class="panel">
+              <h2>Inclusão por texto livre</h2>
+              <label>Texto da missão
+                <textarea id="freeTextInput" rows="8" placeholder="Cole aqui a descrição da missão..."></textarea>
+              </label>
+              <button class="primary-button" id="parseTextButton" type="button">Analisar texto</button>
+            </div>
+            <div class="panel">
+              <h2>Importar O Frag / OMA</h2>
+              <p class="muted import-description">O PDF é processado localmente neste navegador. Nenhum documento é enviado para serviços externos.</p>
+              <label class="pdf-drop-zone" for="pdfImportInput">
+                <strong>Selecionar PDF</strong>
+                <span>O Frag, OMA ou documento semelhante</span>
+                <input id="pdfImportInput" type="file" accept="application/pdf,.pdf" hidden />
+              </label>
+              <div class="import-file-status" id="pdfImportStatus">Nenhum arquivo selecionado.</div>
+              <button class="primary-button" id="processPdfButton" type="button" disabled>Extrair dados do PDF</button>
+              <div class="stacked-actions import-future-actions">
+                <button class="secondary-button soon-button" type="button">Importar Excel</button>
+              </div>
+              <p class="muted">A importação aceita um PDF por vez. PDFs digitalizados somente como imagem ainda precisam de OCR.</p>
+            </div>
+            <div class="panel sync-panel">
+              <div class="form-heading">
+                <div>
+                  <h2>Sincronização do Google Sheets</h2>
+                  <p class="muted">Leitura somente da aba MISSÕES. A planilha não será alterada.</p>
+                </div>
+              </div>
+              <form id="sheetConfigForm" class="review-form">
+                <label>Planilha conectada<input id="sheetDisplayName" value="Planejamento de Missões" /></label>
+                <label>ID da planilha<input id="sheetSpreadsheetId" /></label>
+                <div class="three-columns">
+                  <label>Aba<input id="sheetName" /></label>
+                  <label>Intervalo<input id="sheetRange" /></label>
+                  <label>Ano de referência<input id="sheetReferenceYear" inputmode="numeric" /></label>
+                </div>
+                <div class="three-columns">
+                  <label>Modo de acesso
+                    <select id="sheetAccessMode">
+                      <option value="csv">Link/CSV</option>
+                      <option value="google-api">Conta Google</option>
+                    </select>
+                  </label>
+                  <label>Frequência
+                    <select id="sheetSyncFrequency">
+                      <option value="manual">Manual</option>
+                      <option value="open">Ao abrir</option>
+                      <option value="5">A cada 5 min</option>
+                      <option value="15">A cada 15 min</option>
+                      <option value="30">A cada 30 min</option>
+                      <option value="60">A cada 60 min</option>
+                    </select>
+                  </label>
+                  <label>Bloqueio por programação
+                    <select id="sheetDailyBlockingMode">
+                      <option value="daily">Usar dias programados</option>
+                      <option value="period">Usar período completo</option>
+                      <option value="ask">Perguntar por missão</option>
+                    </select>
+                  </label>
+                </div>
+                <label>Client ID Google para modo privado
+                  <input id="sheetGoogleClientId" placeholder="Opcional no modo CSV. Necessário para Conta Google." />
+                </label>
+                <label class="check-row"><input id="sheetAutoSyncEnabled" type="checkbox" /> Sincronização automática ativada</label>
+                <div class="stacked-actions">
+                  <button class="secondary-button" id="saveSheetConfigButton" type="submit">Salvar configuração</button>
+                  <button class="secondary-button" id="testSheetConnectionButton" type="button">Testar conexão</button>
+                  <button class="primary-button" id="syncSheetNowButton" type="button">Atualizar missões</button>
+                  <button class="ghost-button" id="undoSheetSyncButton" type="button">Desfazer última sincronização</button>
+                </div>
+              </form>
+              <div class="import-file-status" id="sheetSyncStatus">Google Sheets não sincronizado nesta sessão.</div>
+              <div class="sync-history" id="sheetSyncHistory"></div>
+              <p class="muted">Modo CSV não lê cores nem mesclagens visualmente; o app usa preenchimento descendente para interpretar células mescladas.</p>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="missionDialog">
+      <div class="modal-header">
+        <h2 id="dialogTitle">Missão</h2>
+        <button class="icon-button" id="closeDialogButton" type="button" aria-label="Fechar">×</button>
+      </div>
+      <div id="dialogBody"></div>
+      <div class="modal-actions" id="dialogActions"></div>
+    </dialog>
+
+    <dialog id="reviewDialog">
+      <div class="modal-header">
+        <h2>Revisar missão importada</h2>
+        <button class="icon-button" id="closeReviewButton" type="button" aria-label="Fechar">×</button>
+      </div>
+      <form id="reviewForm" class="review-form">
+        <label>Nome<input id="reviewName" required /></label>
+        <div class="two-columns">
+          <label>Data inicial<input id="reviewStart" type="date" required /></label>
+          <label>Data final<input id="reviewEnd" type="date" required /></label>
+        </div>
+        <label>Local<input id="reviewLocation" /></label>
+        <div class="two-columns">
+          <label>Tipo
+            <select id="reviewFlightType">
+              <option value="VFR">VFR</option>
+              <option value="IFR">IFR</option>
+              <option value="OVN">OVN</option>
+            </select>
+          </label>
+          <label>Quantidade<input id="reviewAircraftCount" min="1" type="number" /></label>
+        </div>
+        <label>HDV disponível para a missão
+          <input id="reviewFlightHours" inputmode="decimal" placeholder="Ex.: 12.5 ou 12:00" />
+        </label>
+        <fieldset>
+          <legend>Requisitos especiais</legend>
+          <label class="check-row"><input id="reviewRequiresArm" type="checkbox" /> Braço de armamento aéreo</label>
+          <label class="check-row"><input id="reviewRequiresWinch" type="checkbox" /> Guincho</label>
+          <label class="check-row"><input id="reviewRequiresHook" type="checkbox" /> Gancho</label>
+        </fieldset>
+        <label>Detalhes<textarea id="reviewDetails" rows="4"></textarea></label>
+        <button class="primary-button" type="submit">Confirmar e salvar</button>
+      </form>
+    </dialog>
+
+    <dialog id="pdfReviewDialog" class="wide-dialog">
+      <div class="modal-header">
+        <div>
+          <h2>Revisar dados do O Frag / OMA</h2>
+          <p class="review-warning">Revise os dados extraídos antes de salvar. A leitura automática pode conter erros.</p>
+        </div>
+        <button class="icon-button" id="closePdfReviewButton" type="button" aria-label="Fechar">×</button>
+      </div>
+      <div class="extraction-summary" id="pdfExtractionSummary"></div>
+      <form id="pdfReviewForm" class="review-form">
+        <div class="two-columns">
+          <label>Nome da missão<input id="pdfMissionName" required /></label>
+          <label>Referência da missão<input id="pdfReference" placeholder="Não identificado" /></label>
+        </div>
+        <div class="two-columns">
+          <label>Documento de origem<input id="pdfSourceDocument" placeholder="Não identificado" /></label>
+          <label>SU Ae / Fração<input id="pdfAirUnit" placeholder="Ex.: 1ª EHEG" /></label>
+        </div>
+        <label>Tropa apoiada<input id="pdfSupportedTroop" placeholder="Não identificado" /></label>
+        <label>Localização<input id="pdfLocation" placeholder="Não identificado" /></label>
+        <div class="three-columns">
+          <label>Data inicial<input id="pdfStartDate" type="date" required /></label>
+          <label>Data final<input id="pdfEndDate" type="date" required /></label>
+          <label>Tipo de voo
+            <select id="pdfFlightType">
+              <option value="VFR">VFR</option>
+              <option value="IFR">IFR</option>
+              <option value="OVN">OVN</option>
+            </select>
+          </label>
+        </div>
+        <div class="three-columns">
+          <label>Quantidade de aeronaves<input id="pdfAircraftRequired" min="1" type="number" placeholder="Não identificado" required /></label>
+          <label>Modelo de aeronave<input id="pdfAircraftModel" placeholder="Ex.: HM-1" /></label>
+          <label>HDV / HV disponível<input id="pdfFlightHours" placeholder="Ex.: 15,0 HV" /></label>
+        </div>
+        <fieldset>
+          <legend>Requisitos e etiquetas sugeridos</legend>
+          <div class="requirements-grid">
+            <label class="check-row"><input id="pdfReqArmament" type="checkbox" /> Braço de armamento</label>
+            <label class="check-row"><input id="pdfReqWinch" type="checkbox" /> Guincho</label>
+            <label class="check-row"><input id="pdfReqHook" type="checkbox" /> Gancho</label>
+            <label class="check-row"><input id="pdfReqIfr" type="checkbox" /> IFR</label>
+            <label class="check-row"><input id="pdfReqOvn" type="checkbox" /> OVN</label>
+            <label class="check-row"><input id="pdfReqRestrictedArea" type="checkbox" /> Área restrita</label>
+            <label class="check-row"><input id="pdfReqMedevac" type="checkbox" /> EVA / EVAEM</label>
+            <label class="check-row"><input id="pdfReqParadrop" type="checkbox" /> PQD</label>
+            <label class="check-row"><input id="pdfReqAerialShooting" type="checkbox" /> Tiro embarcado</label>
+          </div>
+        </fieldset>
+        <label>Detalhes operacionais<textarea id="pdfOperationDetails" rows="6" placeholder="Uma atividade por linha"></textarea></label>
+        <div class="three-columns">
+          <label>Contato<input id="pdfContactName" placeholder="Não identificado" /></label>
+          <label>Função<input id="pdfContactRole" placeholder="Não identificado" /></label>
+          <label>Telefone<input id="pdfContactPhone" placeholder="Não identificado" /></label>
+        </div>
+        <label>Observações<textarea id="pdfNotes" rows="4"></textarea></label>
+        <label class="check-row air-unit-confirmation" id="pdfAirUnitConfirmation">
+          <input id="pdfConfirmAirUnit" type="checkbox" />
+          Confirmo que os dados revisados correspondem à 1ª EHEG.
+        </label>
+        <button class="primary-button" type="submit">Comparar e continuar</button>
+      </form>
+    </dialog>
+
+    <dialog id="duplicateDialog" class="wide-dialog">
+      <div class="modal-header">
+        <div>
+          <h2>Possível missão duplicada</h2>
+          <p class="review-warning">Encontramos uma missão parecida já cadastrada. Deseja atualizar a missão existente ou cadastrar como nova missão?</p>
+        </div>
+        <button class="icon-button" id="closeDuplicateButton" type="button" aria-label="Fechar">×</button>
+      </div>
+      <label id="duplicateCandidateLabel">Missão existente para comparação
+        <select id="duplicateCandidateSelect"></select>
+      </label>
+      <div class="comparison-grid">
+        <section class="comparison-panel">
+          <h3>Missão existente</h3>
+          <div id="existingMissionComparison"></div>
+        </section>
+        <section class="comparison-panel imported-comparison">
+          <h3>Missão importada</h3>
+          <div id="importedMissionComparison"></div>
+        </section>
+      </div>
+      <p class="muted comparison-note" id="duplicateReasons"></p>
+      <div class="modal-actions duplicate-actions">
+        <button class="secondary-button" id="cancelPdfImportButton" type="button">Cancelar importação</button>
+        <button class="secondary-button" id="savePdfAsNewButton" type="button">Cadastrar como nova missão</button>
+        <button class="primary-button" id="updateExistingMissionButton" type="button">Atualizar missão existente</button>
+      </div>
+    </dialog>
+
+    <dialog id="sheetSyncDialog" class="wide-dialog">
+      <div class="modal-header">
+        <div>
+          <h2>Revisar sincronização do Google Sheets</h2>
+          <p class="review-warning">Revise antes de aplicar. A leitura automática pode conter erros e não altera a planilha.</p>
+        </div>
+        <button class="icon-button" id="closeSheetSyncDialogButton" type="button" aria-label="Fechar">×</button>
+      </div>
+      <div class="sheet-sync-summary" id="sheetSyncSummary"></div>
+      <div class="sheet-sync-review" id="sheetSyncReview"></div>
+      <div class="modal-actions duplicate-actions">
+        <button class="secondary-button" id="cancelSheetSyncButton" type="button">Cancelar</button>
+        <button class="primary-button" id="applySheetSyncButton" type="button">Aplicar selecionadas</button>
+      </div>
+    </dialog>
+
+    <dialog id="statusDialog">
+      <div class="modal-header">
+        <h2 id="statusDialogTitle">Alterar status da missão</h2>
+        <button class="icon-button" id="closeStatusDialogButton" type="button" aria-label="Fechar">×</button>
+      </div>
+      <div id="statusDialogBody"></div>
+      <div class="modal-actions status-dialog-actions" id="statusDialogActions"></div>
+    </dialog>
+
+    <div class="toast" id="toast" role="status"></div>
+    <script src="vendor/pdfjs/pdf.min.js"></script>
+    <script src="pdf-import.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
