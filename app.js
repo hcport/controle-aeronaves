@@ -3,6 +3,7 @@ const STORAGE_KEY = "plannerAeronavesMissoes:v1";
 const state = {
   aircraft: [],
   missions: [],
+  unavailability: [],
   currentMonth: new Date().getMonth(),
   currentYear: new Date().getFullYear(),
   pendingPdfFile: null,
@@ -60,6 +61,7 @@ function bindElements() {
     "missionsTableBody",
     "missionsList",
     "aircraftList",
+    "unavailabilityList",
     "aircraftSlots",
     "availableAircraftHint",
     "missionDialog",
@@ -133,10 +135,13 @@ function bindEvents() {
   document.getElementById("toggleNextWeekLanesButton").addEventListener("click", () => toggleDashboardWeek("next"));
 
   document.getElementById("aircraftForm").addEventListener("submit", saveAircraftFromForm);
+  document.getElementById("unavailabilityForm").addEventListener("submit", saveUnavailabilityFromForm);
   document.getElementById("missionForm").addEventListener("submit", saveMissionFromForm);
   document.getElementById("clearAircraftFormButton").addEventListener("click", clearAircraftForm);
+  document.getElementById("clearUnavailabilityFormButton").addEventListener("click", clearUnavailabilityForm);
   document.getElementById("clearMissionFormButton").addEventListener("click", clearMissionForm);
   document.getElementById("missionStart").addEventListener("change", syncMissionEndDate);
+  document.getElementById("unavailabilityStart").addEventListener("change", syncUnavailabilityEndDate);
 
   ["missionStart", "missionEnd", "missionFlightType", "missionAircraftCount", "missionRequiresArm", "missionRequiresWinch", "missionRequiresHook"].forEach((id) => {
     document.getElementById(id).addEventListener("input", renderAircraftSlots);
@@ -193,6 +198,7 @@ function loadData() {
     const parsed = JSON.parse(saved);
     state.aircraft = Array.isArray(parsed.aircraft) ? parsed.aircraft : [];
     state.missions = Array.isArray(parsed.missions) ? parsed.missions.map(normalizeMission) : [];
+    state.unavailability = Array.isArray(parsed.unavailability) ? parsed.unavailability.map(normalizeUnavailability) : [];
     state.sheetConfig = { ...state.sheetConfig, ...(parsed.sheetConfig || {}) };
     state.sheetBindings = Array.isArray(parsed.sheetBindings) ? parsed.sheetBindings : [];
     state.syncHistory = Array.isArray(parsed.syncHistory) ? parsed.syncHistory : [];
@@ -265,11 +271,24 @@ function normalizeMission(mission) {
   };
 }
 
+function normalizeUnavailability(item) {
+  return {
+    id: String(item.id || uid("unavailability")),
+    aircraftId: String(item.aircraftId || ""),
+    startDate: String(item.startDate || ""),
+    endDate: String(item.endDate || item.startDate || ""),
+    reason: String(item.reason || "Indisponibilidade"),
+    notes: String(item.notes || ""),
+    createdAt: String(item.createdAt || new Date().toISOString()),
+  };
+}
+
 function persist() {
   // Mantem o app sem servidor: tudo fica no navegador do proprio usuario.
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
     aircraft: state.aircraft,
     missions: state.missions,
+    unavailability: state.unavailability,
     sheetConfig: state.sheetConfig,
     sheetBindings: state.sheetBindings,
     syncHistory: state.syncHistory,
@@ -285,11 +304,14 @@ function showView(viewId) {
   document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active", view.id === viewId));
   document.querySelectorAll(".tab-button").forEach((button) => button.classList.toggle("active", button.dataset.view === viewId));
   if (viewId === "missionsView") renderAircraftSlots();
+  if (viewId === "aircraftView") renderUnavailabilityAircraftOptions();
 }
 
 function renderAll() {
   renderDashboard();
   renderAircraftList();
+  renderUnavailabilityList();
+  renderUnavailabilityAircraftOptions();
   renderMissionsList();
   renderMissionsTable();
   renderCalendar();
@@ -356,6 +378,7 @@ function deleteAircraft(id) {
   const used = state.missions.some((mission) => mission.aircraftAssigned.includes(id));
   if (used && !confirm("Esta aeronave está prevista em missão. Excluir mesmo assim?")) return;
   state.aircraft = state.aircraft.filter((item) => item.id !== id);
+  state.unavailability = state.unavailability.filter((item) => item.aircraftId !== id);
   state.missions = state.missions.map((mission) => ({
     ...mission,
     aircraftAssigned: mission.aircraftAssigned.filter((aircraftId) => aircraftId !== id),
@@ -401,6 +424,114 @@ function renderAircraftList() {
         </article>
       `;
     })
+    .join("");
+}
+
+function renderUnavailabilityAircraftOptions() {
+  const select = document.getElementById("unavailabilityAircraft");
+  if (!select) return;
+  const current = select.value;
+  const options = state.aircraft
+    .slice()
+    .sort((a, b) => a.number.localeCompare(b.number, "pt-BR", { numeric: true }))
+    .map((aircraft) => `<option value="${aircraft.id}">${escapeHtml(aircraft.number)}${aircraft.status === "down" ? " — Baixada" : ""}</option>`)
+    .join("");
+  select.innerHTML = options ? `<option value="">Selecione</option>${options}` : `<option value="">Cadastre uma aeronave primeiro</option>`;
+  select.value = state.aircraft.some((aircraft) => aircraft.id === current) ? current : "";
+}
+
+function saveUnavailabilityFromForm(event) {
+  event.preventDefault();
+  const id = document.getElementById("unavailabilityId").value || uid("unavailability");
+  const record = normalizeUnavailability({
+    id,
+    aircraftId: document.getElementById("unavailabilityAircraft").value,
+    startDate: document.getElementById("unavailabilityStart").value,
+    endDate: document.getElementById("unavailabilityEnd").value,
+    reason: document.getElementById("unavailabilityReason").value.trim() || "Indisponibilidade",
+    notes: document.getElementById("unavailabilityNotes").value.trim(),
+  });
+
+  if (!record.aircraftId) return showToast("Selecione a aeronave.");
+  if (!record.startDate || !record.endDate) return showToast("Informe as datas da indisponibilidade.");
+  if (record.endDate < record.startDate) return showToast("A data final não pode ser anterior à inicial.");
+
+  const index = state.unavailability.findIndex((item) => item.id === id);
+  if (index >= 0) state.unavailability[index] = record;
+  else state.unavailability.push(record);
+
+  persist();
+  clearUnavailabilityForm();
+  renderAll();
+  showToast("Indisponibilidade salva.");
+}
+
+function clearUnavailabilityForm() {
+  document.getElementById("unavailabilityForm").reset();
+  document.getElementById("unavailabilityId").value = "";
+  document.getElementById("unavailabilityEnd").min = "";
+  document.getElementById("unavailabilityFormTitle").textContent = "Indisponibilidade temporária";
+  renderUnavailabilityAircraftOptions();
+}
+
+function syncUnavailabilityEndDate() {
+  const startInput = document.getElementById("unavailabilityStart");
+  const endInput = document.getElementById("unavailabilityEnd");
+  endInput.min = startInput.value;
+  if (startInput.value && (!endInput.value || endInput.value < startInput.value)) {
+    endInput.value = startInput.value;
+  }
+}
+
+function editUnavailability(id) {
+  const item = state.unavailability.find((record) => record.id === id);
+  if (!item) return;
+  showView("aircraftView");
+  renderUnavailabilityAircraftOptions();
+  document.getElementById("unavailabilityId").value = item.id;
+  document.getElementById("unavailabilityAircraft").value = item.aircraftId;
+  document.getElementById("unavailabilityStart").value = item.startDate;
+  document.getElementById("unavailabilityEnd").value = item.endDate;
+  document.getElementById("unavailabilityReason").value = item.reason;
+  document.getElementById("unavailabilityNotes").value = item.notes;
+  syncUnavailabilityEndDate();
+  document.getElementById("unavailabilityFormTitle").textContent = "Editar indisponibilidade";
+}
+
+function deleteUnavailability(id) {
+  if (!confirm("Excluir esta indisponibilidade?")) return;
+  state.unavailability = state.unavailability.filter((item) => item.id !== id);
+  persist();
+  renderAll();
+  showToast("Indisponibilidade excluída.");
+}
+
+function renderUnavailabilityList() {
+  if (!els.unavailabilityList) return;
+  if (!state.unavailability.length) {
+    els.unavailabilityList.innerHTML = `<p class="muted">Nenhuma indisponibilidade temporária cadastrada.</p>`;
+    return;
+  }
+
+  els.unavailabilityList.innerHTML = state.unavailability
+    .slice()
+    .sort((a, b) => a.startDate.localeCompare(b.startDate) || aircraftRefNumber(a.aircraftId).localeCompare(aircraftRefNumber(b.aircraftId), "pt-BR", { numeric: true }))
+    .map((item) => `
+      <article class="item-card unavailability-card">
+        <div class="item-card-header">
+          <div>
+            <div class="item-title">${escapeHtml(aircraftRefNumber(item.aircraftId) || "Aeronave não encontrada")} — ${escapeHtml(item.reason)}</div>
+            <div class="item-meta">${formatDate(item.startDate)} a ${formatDate(item.endDate)}</div>
+          </div>
+          <span class="status-pill status-down">Indisponível</span>
+        </div>
+        ${item.notes ? `<div class="item-meta">${escapeHtml(item.notes)}</div>` : ""}
+        <div class="item-actions">
+          <button class="secondary-button" type="button" onclick="editUnavailability('${item.id}')">Editar</button>
+          <button class="ghost-button" type="button" onclick="deleteUnavailability('${item.id}')">Excluir</button>
+        </div>
+      </article>
+    `)
     .join("");
 }
 
@@ -654,7 +785,16 @@ function availableAircraftForMission(mission, excludedIds = []) {
     .filter((aircraft) => !mission.requirements.winch || aircraft.capabilities.winch)
     .filter((aircraft) => !mission.requirements.hook || aircraft.capabilities.hook)
     .filter((aircraft) => !excludedIds.includes(aircraft.id))
+    .filter((aircraft) => !hasAircraftUnavailabilityConflict(aircraft.id, mission.startDate, mission.endDate))
     .filter((aircraft) => !hasAircraftDateConflict(aircraft.id, mission));
+}
+
+function hasAircraftUnavailabilityConflict(aircraftId, startDate, endDate) {
+  if (!aircraftId || !startDate || !endDate) return false;
+  return state.unavailability.some((item) =>
+    item.aircraftId === aircraftId
+    && rangesOverlap(item.startDate, item.endDate, startDate, endDate)
+  );
 }
 
 function hasAircraftDateConflict(aircraftId, mission) {
@@ -786,12 +926,20 @@ function getAircraftAvailabilityForDate(date) {
   const demand = getAircraftDemandForDate(date);
   const upAircraft = state.aircraft.filter((aircraft) => aircraft.status === "up");
   const downAircraft = state.aircraft.filter((aircraft) => aircraft.status === "down");
+  const iso = typeof date === "string" ? date : toIsoDate(date);
+  const unavailableIds = new Set(state.unavailability
+    .filter((item) => item.startDate <= iso && item.endDate >= iso)
+    .map((item) => item.aircraftId));
   const assignedUpIds = demand.assignedIds.filter((aircraftRef) => upAircraft.some((aircraft) => aircraftRefMatches(aircraftRef, aircraft.id)));
-  const availableAircraft = upAircraft.filter((aircraft) => !assignedUpIds.some((aircraftRef) => aircraftRefMatches(aircraftRef, aircraft.id)));
+  const availableAircraft = upAircraft.filter((aircraft) =>
+    !unavailableIds.has(aircraft.id)
+    && !assignedUpIds.some((aircraftRef) => aircraftRefMatches(aircraftRef, aircraft.id))
+  );
   return {
     total: state.aircraft.length,
     up: upAircraft.length,
     down: downAircraft.length,
+    unavailable: unavailableIds.size,
     assignedToday: assignedUpIds.length,
     availableNow: availableAircraft.length,
     availableAircraft,
@@ -1183,10 +1331,13 @@ function renderCalendar() {
     const monthEnd = toIsoDate(days[days.length - 1]);
     return rangesOverlap(mission.startDate, mission.endDate, monthStart, monthEnd);
   });
-  const laneLayout = assignMissionLanes(visibleMissions);
+  const plannerAircraft = plannerAircraftRows();
+  const activeDemandCount = visibleMissions
+    .filter((mission) => mission.status === "planned")
+    .reduce((sum, mission) => sum + Math.max(0, mission.aircraftRequired || 0), 0);
   const activeCount = visibleMissions.filter((mission) => mission.status === "planned").length;
   const cancelledCount = visibleMissions.length - activeCount;
-  els.plannerSummary.textContent = `${activeCount} ativa(s)${showCancelled ? ` · ${cancelledCount} cancelada(s)` : ""} em ${laneLayout.count} faixa(s).`;
+  els.plannerSummary.textContent = `${activeCount} ativa(s)${showCancelled ? ` · ${cancelledCount} cancelada(s)` : ""} · ${plannerAircraft.length} linha(s) de aeronave · demanda ativa geral ${activeDemandCount} ANV.`;
 
   const weekdays = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
   const header = weekdays.map((day) => `<div class="weekday">${day}</div>`).join("");
@@ -1194,59 +1345,161 @@ function renderCalendar() {
   const cells = days.map((date) => {
     const iso = toIsoDate(date);
     const dateStateClass = iso === todayIso ? "today" : iso < todayIso ? "past-day" : "";
-    const activeByLane = new Map();
-    visibleMissions
-      .filter((mission) => mission.startDate <= iso && mission.endDate >= iso)
-      .forEach((mission) => activeByLane.set(laneLayout.lanesByMission.get(mission.id), mission));
-
-    const lanes = Array.from({ length: laneLayout.count }, (_, lane) => {
-      const mission = activeByLane.get(lane);
-      if (!mission) return `<div class="mission-lane-slot" aria-hidden="true"></div>`;
-
-        const isMissionStart = mission.startDate === iso;
-        const isMissionEnd = mission.endDate === iso;
-        const startsVisualRow = isMissionStart || date.getDay() === 0;
-        const endsVisualRow = isMissionEnd || date.getDay() === 6;
-        const segmentClass = startsVisualRow && endsVisualRow
-          ? "mission-single-day"
-          : startsVisualRow
-            ? "mission-start"
-            : endsVisualRow
-              ? "mission-end"
-              : "mission-middle";
-        const daily = dailyPlanningForDate(mission, iso);
-        const assignedRefs = daily ? (daily.aircraftAssigned || []) : mission.aircraftAssigned;
-        const requiredForDay = daily ? Number(daily.aircraftRequired || 0) : mission.aircraftRequired;
-        const selectedNumbers = assignedRefs.map((ref) => aircraftRefNumber(ref)).filter(Boolean);
-        const pending = Math.max(0, requiredForDay - selectedNumbers.length);
-        const cancelled = mission.status === "cancelled";
-        const dailyLabel = daily ? `${requiredForDay} ANV${selectedNumbers.length ? ` · ${selectedNumbers.join("/")}` : ""}` : mission.dailyPlanning?.length ? "Sem ANV definida" : `${mission.aircraftRequired} ANV`;
-        const tooltip = `${cancelled ? "CANCELADA · " : ""}${mission.name} · ${mission.flightType} · ${dailyLabel} · ${selectedNumbers.length} selecionadas · ${pending} a definir · HDV ${mission.flightHoursDisplay || mission.flightHoursAvailable || "não informado"}`;
-        const aircraftSummary = [
-          selectedNumbers.join(" / "),
-          pending ? `+${pending} a definir` : "",
-        ].filter(Boolean).join(" / ") || (daily ? `${requiredForDay} ANV` : `${mission.aircraftRequired || "Qtd"} a definir`);
-
-        return `
-          <div class="mission-lane-slot">
-            <button class="mission-block mission-segment ${segmentClass} ${cancelled ? "mission-block-cancelled" : ""}" title="${escapeHtml(tooltip)}" type="button" onclick="openMissionDetails('${mission.id}')">
-              <span class="mission-block-header">${cancelled ? "CANCELADA — " : ""}${escapeHtml(mission.name)} · ${mission.flightType} · ${daily ? `${requiredForDay} ANV` : `${mission.aircraftRequired} ANV`}</span>
-              <span class="mission-block-counts">${cancelled ? "Não consome disponibilidade · " : ""}${selectedNumbers.length} selecionadas · <strong>${pending} a definir</strong>${mission.flightHoursDisplay || mission.flightHoursAvailable ? ` · HV ${escapeHtml(mission.flightHoursDisplay || mission.flightHoursAvailable)}` : ""}</span>
-              <span class="mission-block-aircraft">${escapeHtml(aircraftSummary)}</span>
-            </button>
-          </div>
-        `;
-      }).join("");
+    const pendingByAircraft = pendingMissionSlotsForDate(visibleMissions, plannerAircraft, iso);
+    const lanes = plannerAircraft.map((aircraft) => {
+      const unavailability = aircraftUnavailabilityForDate(aircraft.id, iso);
+      const assignedMission = visibleMissions.find((mission) => missionUsesAircraftOnDate(mission, aircraft.id, iso));
+      const pendingMission = pendingByAircraft.get(aircraft.id);
+      const down = aircraft.status === "down";
+      const rowClass = down ? "planner-aircraft-row-down" : "";
+      const block = unavailability
+        ? renderUnavailabilityCalendarBlock(unavailability, aircraft, iso, date)
+        : assignedMission
+          ? renderMissionCalendarBlock(assignedMission, aircraft, iso, date)
+          : !down && pendingMission
+            ? renderPendingMissionCalendarBlock(pendingMission, iso, date)
+            : "";
+      return `
+        <div class="planner-aircraft-row ${rowClass}" title="${escapeHtml(aircraft.number)}${down ? " baixada" : ""}">
+          <span class="planner-aircraft-label">${escapeHtml(aircraft.number)}</span>
+          <div class="planner-aircraft-slot">${block}</div>
+        </div>
+      `;
+    }).join("");
 
     return `
       <div class="day-cell ${date.getMonth() === state.currentMonth ? "" : "outside-month"} ${dateStateClass}">
         <div class="day-number">${date.getDate()}</div>
-        <div class="mission-lanes">${lanes}</div>
+        <div class="mission-lanes planner-aircraft-lanes">${lanes || `<p class="planner-empty-aircraft">Cadastre aeronaves para ver as linhas do planner.</p>`}</div>
       </div>
     `;
   }).join("");
 
   els.calendar.innerHTML = `<div class="calendar-grid">${header}${cells}</div>`;
+}
+
+function plannerAircraftRows() {
+  return state.aircraft
+    .slice()
+    .sort((a, b) =>
+      (a.status === "down") - (b.status === "down")
+      || a.number.localeCompare(b.number, "pt-BR", { numeric: true })
+    );
+}
+
+function aircraftUnavailabilityForDate(aircraftId, date) {
+  return state.unavailability
+    .filter((item) => item.aircraftId === aircraftId && item.startDate <= date && item.endDate >= date)
+    .sort((a, b) => a.startDate.localeCompare(b.startDate))[0] || null;
+}
+
+function missionUsesAircraftOnDate(mission, aircraftId, date) {
+  if (mission.startDate > date || mission.endDate < date) return false;
+  if (mission.status === "cancelled") {
+    return mission.aircraftAssigned.some((ref) => aircraftRefMatches(ref, aircraftId));
+  }
+  if (Array.isArray(mission.dailyPlanning) && mission.dailyPlanning.length && state.sheetConfig.dailyBlockingMode !== "period") {
+    const daily = dailyPlanningForDate(mission, date);
+    return !!daily && (daily.aircraftAssigned || []).some((ref) => aircraftRefMatches(ref, aircraftId));
+  }
+  return mission.aircraftAssigned.some((ref) => aircraftRefMatches(ref, aircraftId));
+}
+
+function missionDemandForDate(mission, date) {
+  const daily = dailyPlanningForDate(mission, date);
+  if (daily) return Number(daily.aircraftRequired || 0);
+  if (Array.isArray(mission.dailyPlanning) && mission.dailyPlanning.length && state.sheetConfig.dailyBlockingMode === "daily") return 0;
+  return Number(mission.aircraftRequired || 0);
+}
+
+function missionAssignedRefsForDate(mission, date) {
+  const daily = dailyPlanningForDate(mission, date);
+  if (daily) return daily.aircraftAssigned || [];
+  if (Array.isArray(mission.dailyPlanning) && mission.dailyPlanning.length && state.sheetConfig.dailyBlockingMode === "daily") return [];
+  return mission.aircraftAssigned || [];
+}
+
+function pendingMissionSlotsForDate(missions, aircraftRows, date) {
+  const allocated = new Map();
+  const occupiedIds = new Set();
+
+  aircraftRows.forEach((aircraft) => {
+    if (aircraft.status === "down" || aircraftUnavailabilityForDate(aircraft.id, date)) occupiedIds.add(aircraft.id);
+  });
+
+  missions
+    .filter((mission) => mission.status !== "cancelled" && mission.startDate <= date && mission.endDate >= date)
+    .forEach((mission) => {
+      missionAssignedRefsForDate(mission, date).forEach((ref) => {
+        const aircraft = state.aircraft.find((item) => aircraftRefMatches(ref, item.id));
+        if (aircraft) occupiedIds.add(aircraft.id);
+      });
+    });
+
+  missions
+    .filter((mission) => mission.status !== "cancelled" && mission.startDate <= date && mission.endDate >= date)
+    .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.name.localeCompare(b.name, "pt-BR"))
+    .forEach((mission) => {
+      const required = missionDemandForDate(mission, date);
+      const assignedCount = missionAssignedRefsForDate(mission, date).length;
+      let pending = Math.max(0, required - assignedCount);
+      for (const aircraft of aircraftRows) {
+        if (!pending) break;
+        if (aircraft.status === "down" || occupiedIds.has(aircraft.id)) continue;
+        allocated.set(aircraft.id, mission);
+        occupiedIds.add(aircraft.id);
+        pending -= 1;
+      }
+    });
+
+  return allocated;
+}
+
+function calendarSegmentClass(startDate, endDate, iso, date) {
+  const isStart = startDate === iso;
+  const isEnd = endDate === iso;
+  const startsVisualRow = isStart || date.getDay() === 0;
+  const endsVisualRow = isEnd || date.getDay() === 6;
+  if (startsVisualRow && endsVisualRow) return "mission-single-day";
+  if (startsVisualRow) return "mission-start";
+  if (endsVisualRow) return "mission-end";
+  return "mission-middle";
+}
+
+function renderMissionCalendarBlock(mission, aircraft, iso, date) {
+  const segmentClass = calendarSegmentClass(mission.startDate, mission.endDate, iso, date);
+  const requiredForDay = missionDemandForDate(mission, iso) || mission.aircraftRequired;
+  const selectedNumbers = missionAssignedRefsForDate(mission, iso).map((ref) => aircraftRefNumber(ref)).filter(Boolean);
+  const pending = Math.max(0, requiredForDay - selectedNumbers.length);
+  const cancelled = mission.status === "cancelled";
+  const tooltip = `${cancelled ? "CANCELADA · " : ""}${mission.name} · ${aircraft.number} · ${requiredForDay} ANV · ${pending} a definir`;
+  return `
+    <button class="mission-block planner-compact-block mission-segment ${segmentClass} ${cancelled ? "mission-block-cancelled" : ""}" title="${escapeHtml(tooltip)}" type="button" onclick="openMissionDetails('${mission.id}')">
+      <span>${cancelled ? "CANCELADA · " : ""}${escapeHtml(shortMissionName(mission.name))} · ${requiredForDay} ANV${pending ? ` · ${pending} def.` : ""}</span>
+    </button>
+  `;
+}
+
+function renderPendingMissionCalendarBlock(mission, iso, date) {
+  const segmentClass = calendarSegmentClass(mission.startDate, mission.endDate, iso, date);
+  const requiredForDay = missionDemandForDate(mission, iso) || mission.aircraftRequired;
+  const assignedCount = missionAssignedRefsForDate(mission, iso).length;
+  const pending = Math.max(0, requiredForDay - assignedCount);
+  return `
+    <button class="mission-block planner-compact-block mission-segment ${segmentClass} mission-block-pending" title="${escapeHtml(`${mission.name} · ${pending} aeronave(s) a definir`)}" type="button" onclick="openMissionDetails('${mission.id}')">
+      <span>${escapeHtml(shortMissionName(mission.name))} · A DEFINIR · ${pending} def.</span>
+    </button>
+  `;
+}
+
+function renderUnavailabilityCalendarBlock(item, aircraft, iso, date) {
+  const segmentClass = calendarSegmentClass(item.startDate, item.endDate, iso, date);
+  const tooltip = `${aircraft.number} indisponível · ${item.reason} · ${formatDate(item.startDate)} a ${formatDate(item.endDate)}`;
+  return `
+    <button class="mission-block planner-compact-block mission-segment unavailability-block" title="${escapeHtml(tooltip)}" type="button" onclick="editUnavailability('${item.id}')">
+      <span>${escapeHtml(item.reason || "Indisponível")}</span>
+    </button>
+  `;
 }
 
 function openMissionDetails(id) {
@@ -2676,6 +2929,7 @@ function exportBackup() {
   const blob = new Blob([JSON.stringify({
     aircraft: state.aircraft,
     missions: state.missions,
+    unavailability: state.unavailability,
     sheetConfig: state.sheetConfig,
     sheetBindings: state.sheetBindings,
     syncHistory: state.syncHistory,
@@ -2698,6 +2952,7 @@ function importBackup(event) {
       if (!Array.isArray(parsed.aircraft) || !Array.isArray(parsed.missions)) throw new Error("Formato inválido");
       state.aircraft = parsed.aircraft;
       state.missions = parsed.missions.map(normalizeMission);
+      state.unavailability = Array.isArray(parsed.unavailability) ? parsed.unavailability.map(normalizeUnavailability) : [];
       state.sheetConfig = { ...state.sheetConfig, ...(parsed.sheetConfig || {}) };
       state.sheetBindings = Array.isArray(parsed.sheetBindings) ? parsed.sheetBindings : [];
       state.syncHistory = Array.isArray(parsed.syncHistory) ? parsed.syncHistory : [];

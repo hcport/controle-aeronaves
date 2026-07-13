@@ -224,6 +224,31 @@
               <h2>Aeronaves cadastradas</h2>
               <div class="list" id="aircraftList"></div>
             </div>
+
+            <form class="panel" id="unavailabilityForm">
+              <div class="form-heading">
+                <h2 id="unavailabilityFormTitle">Indisponibilidade temporária</h2>
+                <button class="ghost-button" id="clearUnavailabilityFormButton" type="button">Limpar</button>
+              </div>
+              <input id="unavailabilityId" type="hidden" />
+              <label>Aeronave
+                <select id="unavailabilityAircraft" required></select>
+              </label>
+              <div class="two-columns">
+                <label>Data inicial<input id="unavailabilityStart" type="date" required /></label>
+                <label>Data final<input id="unavailabilityEnd" type="date" required /></label>
+              </div>
+              <label>Motivo
+                <input id="unavailabilityReason" placeholder="Ex.: manutenção, inspeção, pane..." />
+              </label>
+              <label>Observações<textarea id="unavailabilityNotes" rows="3"></textarea></label>
+              <button class="primary-button" type="submit">Salvar indisponibilidade</button>
+            </form>
+
+            <div class="panel">
+              <h2>Indisponibilidades cadastradas</h2>
+              <div class="list" id="unavailabilityList"></div>
+            </div>
           </div>
         </section>
 
