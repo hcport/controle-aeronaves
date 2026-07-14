@@ -354,6 +354,15 @@ h2 {
   grid-template-columns: minmax(300px, 430px) 1fr;
 }
 
+#missionsView .grid-layout,
+#aircraftView .grid-layout {
+  grid-template-columns: 1fr;
+}
+
+.compact-action-panel {
+  padding: 14px 16px;
+}
+
 .dashboard-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1076,6 +1085,73 @@ legend {
   border: 2px solid #bd3434;
 }
 
+.mission-sheet-row {
+  background: #e8ffff;
+  border: 1px solid #2f8f91;
+  display: grid;
+  gap: 0;
+}
+
+.mission-sheet-row:nth-child(even) {
+  background: #d9fbfb;
+}
+
+.mission-sheet-row.mission-card-cancelled {
+  background: #ffd9d9;
+  border-color: #bd3434;
+}
+
+.mission-sheet-main {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  display: grid;
+  font-size: 0.78rem;
+  gap: 4px 10px;
+  grid-template-columns: minmax(220px, 1.7fr) minmax(150px, 1.2fr) minmax(120px, 0.8fr) 54px minmax(150px, 1fr) 78px minmax(80px, 0.7fr) 86px;
+  line-height: 1.15;
+  min-height: 32px;
+  padding: 5px 8px;
+  text-align: left;
+  width: 100%;
+}
+
+.mission-sheet-main:hover {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.mission-sheet-main strong,
+.mission-sheet-main span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mission-sheet-main strong {
+  font-size: 0.81rem;
+  font-weight: 900;
+}
+
+.mission-sheet-status {
+  font-weight: 900;
+  text-align: right;
+}
+
+.mission-sheet-actions {
+  border-top: 1px solid rgba(47, 143, 145, 0.38);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 8px 6px;
+}
+
+.mission-sheet-actions button {
+  min-height: 28px;
+  padding: 5px 9px;
+}
+
 .status-pill,
 .tag {
   border-radius: 999px;
@@ -1769,6 +1845,15 @@ dialog::backdrop {
   .topbar,
   .section-toolbar {
     flex-direction: column;
+  }
+
+  .mission-sheet-main {
+    grid-template-columns: minmax(160px, 1.4fr) minmax(120px, 1fr) minmax(105px, 0.8fr) minmax(125px, 1fr);
+    min-width: 760px;
+  }
+
+  .mission-sheet-row {
+    overflow-x: auto;
   }
 
   .topbar-actions,

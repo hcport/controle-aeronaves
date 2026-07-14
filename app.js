@@ -12,7 +12,7 @@ const state = {
   pendingPdfFile: null,
   pendingImportedMission: null,
   similarMissions: [],
-  missionFilter: "all",
+  missionFilter: "planned",
   pendingStatusMissionId: null,
   pendingPdfMergedMission: null,
   pendingSheetSync: null,
@@ -118,15 +118,15 @@ function bindEvents() {
   document.getElementById("nextMonthButton").addEventListener("click", () => moveMonth(1));
   document.getElementById("newMissionFromPlannerButton").addEventListener("click", () => {
     clearMissionForm();
-    showView("missionsView");
+    openMissionFormDialog();
   });
   document.getElementById("dashboardNewMissionButton").addEventListener("click", () => {
     clearMissionForm();
-    showView("missionsView");
+    openMissionFormDialog();
   });
   document.getElementById("dashboardNewAircraftButton").addEventListener("click", () => {
     clearAircraftForm();
-    showView("aircraftView");
+    openAircraftFormDialog();
   });
   document.getElementById("dashboardImportPdfButton").addEventListener("click", () => showView("importView"));
   document.getElementById("dashboardOpenPlannerButton").addEventListener("click", () => showView("plannerView"));
@@ -154,9 +154,25 @@ function bindEvents() {
   document.getElementById("aircraftForm").addEventListener("submit", saveAircraftFromForm);
   document.getElementById("unavailabilityForm").addEventListener("submit", saveUnavailabilityFromForm);
   document.getElementById("missionForm").addEventListener("submit", saveMissionFromForm);
-  document.getElementById("clearAircraftFormButton").addEventListener("click", clearAircraftForm);
-  document.getElementById("clearUnavailabilityFormButton").addEventListener("click", clearUnavailabilityForm);
-  document.getElementById("clearMissionFormButton").addEventListener("click", clearMissionForm);
+  document.getElementById("openMissionFormButton").addEventListener("click", () => {
+    clearMissionForm();
+    openMissionFormDialog();
+  });
+  document.getElementById("openMissionFormButtonList").addEventListener("click", () => {
+    clearMissionForm();
+    openMissionFormDialog();
+  });
+  document.getElementById("openAircraftFormButton").addEventListener("click", () => {
+    clearAircraftForm();
+    openAircraftFormDialog();
+  });
+  document.getElementById("openUnavailabilityFormButton").addEventListener("click", () => {
+    clearUnavailabilityForm();
+    openUnavailabilityFormDialog();
+  });
+  document.getElementById("closeMissionFormDialogButton").addEventListener("click", () => document.getElementById("missionFormDialog").close());
+  document.getElementById("closeAircraftFormDialogButton").addEventListener("click", () => document.getElementById("aircraftFormDialog").close());
+  document.getElementById("closeUnavailabilityFormDialogButton").addEventListener("click", () => document.getElementById("unavailabilityFormDialog").close());
   document.getElementById("missionStart").addEventListener("change", syncMissionEndDate);
   document.getElementById("unavailabilityStart").addEventListener("change", syncUnavailabilityEndDate);
 
@@ -542,6 +558,20 @@ function showView(viewId) {
   if (viewId === "aircraftView") renderUnavailabilityAircraftOptions();
 }
 
+function openMissionFormDialog() {
+  renderAircraftSlots();
+  document.getElementById("missionFormDialog").showModal();
+}
+
+function openAircraftFormDialog() {
+  document.getElementById("aircraftFormDialog").showModal();
+}
+
+function openUnavailabilityFormDialog() {
+  renderUnavailabilityAircraftOptions();
+  document.getElementById("unavailabilityFormDialog").showModal();
+}
+
 function renderAll() {
   renderDashboard();
   renderAircraftList();
@@ -581,6 +611,7 @@ function saveAircraftFromForm(event) {
   else state.aircraft.push(record);
 
   persist();
+  document.getElementById("aircraftFormDialog").close();
   clearAircraftForm();
   renderAll();
   showToast("Aeronave salva.");
@@ -595,7 +626,6 @@ function clearAircraftForm() {
 function editAircraft(id) {
   const aircraft = state.aircraft.find((item) => item.id === id);
   if (!aircraft) return;
-  showView("aircraftView");
   document.getElementById("aircraftId").value = aircraft.id;
   document.getElementById("aircraftNumber").value = aircraft.number;
   document.getElementById("aircraftStatus").value = aircraft.status;
@@ -608,6 +638,7 @@ function editAircraft(id) {
   document.getElementById("aircraftHdv").value = aircraft.hdv || "";
   document.getElementById("aircraftDetails").value = aircraft.details || "";
   document.getElementById("aircraftFormTitle").textContent = "Editar aeronave";
+  openAircraftFormDialog();
 }
 
 function deleteAircraft(id) {
@@ -699,6 +730,7 @@ function saveUnavailabilityFromForm(event) {
   else state.unavailability.push(record);
 
   persist();
+  document.getElementById("unavailabilityFormDialog").close();
   clearUnavailabilityForm();
   renderAll();
   showToast("Indisponibilidade salva.");
@@ -724,7 +756,6 @@ function syncUnavailabilityEndDate() {
 function editUnavailability(id) {
   const item = state.unavailability.find((record) => record.id === id);
   if (!item) return;
-  showView("aircraftView");
   renderUnavailabilityAircraftOptions();
   document.getElementById("unavailabilityId").value = item.id;
   document.getElementById("unavailabilityAircraft").value = item.aircraftId;
@@ -734,6 +765,7 @@ function editUnavailability(id) {
   document.getElementById("unavailabilityNotes").value = item.notes;
   syncUnavailabilityEndDate();
   document.getElementById("unavailabilityFormTitle").textContent = "Editar indisponibilidade";
+  openUnavailabilityFormDialog();
 }
 
 function deleteUnavailability(id) {
@@ -807,6 +839,7 @@ function saveMissionFromForm(event) {
   const record = missionFormData();
   if (!validateMission(record)) return;
   upsertMission(record);
+  document.getElementById("missionFormDialog").close();
   clearMissionForm();
   renderAll();
   showToast("Missão salva.");
@@ -852,7 +885,6 @@ function editMission(id) {
   const mission = state.missions.find((item) => item.id === id);
   if (!mission) return;
   els.missionDialog.close();
-  showView("missionsView");
   document.getElementById("missionId").value = mission.id;
   document.getElementById("missionName").value = mission.name;
   document.getElementById("missionStart").value = mission.startDate;
@@ -868,6 +900,7 @@ function editMission(id) {
   document.getElementById("missionDetails").value = mission.details || "";
   document.getElementById("missionFormTitle").textContent = "Editar missão";
   renderAircraftSlots(mission.aircraftAssigned);
+  openMissionFormDialog();
 }
 
 function deleteMission(id) {
@@ -1469,7 +1502,12 @@ function toggleDashboardWeek(key) {
 }
 
 function renderMissionsList() {
-  const filteredMissions = sortedMissions().filter((mission) => state.missionFilter === "all" || mission.status === state.missionFilter);
+  const today = toIsoDate(new Date());
+  const filteredMissions = sortedMissions().filter((mission) => {
+    if (state.missionFilter === "all") return true;
+    if (state.missionFilter === "cancelled") return mission.status === "cancelled";
+    return mission.status !== "cancelled" && mission.endDate >= today;
+  });
   if (!filteredMissions.length) {
     els.missionsList.innerHTML = `<p class="muted">Nenhuma missão cadastrada.</p>`;
     return;
@@ -1479,18 +1517,22 @@ function renderMissionsList() {
     .map((mission) => {
       const selected = mission.aircraftAssigned.length;
       const pending = Math.max(0, mission.aircraftRequired - selected);
+      const numbers = aircraftNumbers(mission).join("/");
+      const aircraftLine = `Anvs: ${String(mission.aircraftRequired || 0).padStart(2, "0")} - ${numbers}`;
+      const statusText = mission.status === "cancelled" ? "CANCELADA" : mission.startDate <= today && mission.endDate >= today ? "EM CURSO" : mission.endDate < today ? "ENCERRADA" : "PREVISTA";
       return `
-      <article class="item-card mission-card ${mission.status === "cancelled" ? "mission-card-cancelled" : ""}">
-        <div class="item-card-header">
-          <div>
-            <div class="item-title">${mission.status === "cancelled" ? "CANCELADA — " : ""}${escapeHtml(mission.name)}</div>
-            <div class="item-meta">${formatDate(mission.startDate)} a ${formatDate(mission.endDate)} · ${escapeHtml(mission.location || "sem local")}</div>
-          </div>
-          <span class="status-pill ${mission.status === "cancelled" ? "mission-status-cancelled" : "mission-status-planned"}">${mission.status === "cancelled" ? "Cancelada" : "Ativa"}</span>
-        </div>
-        <div class="mission-demand-summary"><strong>${mission.aircraftRequired} previstas</strong><span>${selected} selecionadas</span><span class="${pending ? "pending-text" : ""}">${pending} a definir</span></div>
-        <div class="item-meta">Numerais: ${escapeHtml(aircraftNumbers(mission).join(", ") || "a definir")} · HDV: ${escapeHtml(mission.flightHoursAvailable || "não informado")}</div>
-        <div class="item-actions">
+      <article class="mission-sheet-row ${mission.status === "cancelled" ? "mission-card-cancelled" : ""}">
+        <button class="mission-sheet-main" type="button" onclick="openMissionDetails('${mission.id}')">
+          <strong>${mission.status === "cancelled" ? "CANCELADA — " : ""}${escapeHtml(mission.name)}</strong>
+          <span>${escapeHtml(mission.location || "sem local")}</span>
+          <span>${formatDate(mission.startDate)} a ${formatDate(mission.endDate)}</span>
+          <span>${escapeHtml(mission.flightType || "VFR")}</span>
+          <span>${escapeHtml(aircraftLine)}</span>
+          <span>HV: ${escapeHtml(mission.flightHoursDisplay || mission.flightHoursAvailable || "—")}</span>
+          <span class="${pending ? "pending-text" : ""}">${pending ? `${pending} a definir` : "completa"}</span>
+          <span class="mission-sheet-status">${statusText}</span>
+        </button>
+        <div class="mission-sheet-actions">
           <button class="secondary-button" type="button" onclick="editMission('${mission.id}')">Editar</button>
           <button class="${mission.status === "cancelled" ? "primary-button" : "danger-outline-button"}" type="button" onclick="${mission.status === "cancelled" ? "requestReactivateMission" : "requestCancelMission"}('${mission.id}')">${mission.status === "cancelled" ? "Reativar" : "Cancelar missão"}</button>
           <button class="ghost-button" type="button" onclick="deleteMission('${mission.id}')">Excluir</button>

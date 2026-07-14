@@ -136,58 +136,27 @@
 
         <section class="view" id="missionsView">
           <div class="grid-layout">
-            <form class="panel" id="missionForm">
+            <div class="panel compact-action-panel">
               <div class="form-heading">
-                <h2 id="missionFormTitle">Cadastrar missão</h2>
-                <button class="ghost-button" id="clearMissionFormButton" type="button">Limpar</button>
-              </div>
-              <input id="missionId" type="hidden" />
-              <label>Nome da missão<input id="missionName" required /></label>
-              <div class="two-columns">
-                <label>Data inicial<input id="missionStart" type="date" required /></label>
-                <label>Data final<input id="missionEnd" type="date" required /></label>
-              </div>
-              <label>Local<input id="missionLocation" /></label>
-              <div class="two-columns">
-                <label>Tipo de voo
-                  <select id="missionFlightType">
-                    <option value="VFR">VFR</option>
-                    <option value="IFR">IFR</option>
-                    <option value="OVN">OVN</option>
-                  </select>
-                </label>
-                <label>Quantidade de aeronaves
-                  <input id="missionAircraftCount" min="1" type="number" value="1" />
-                </label>
-              </div>
-              <label>HDV disponível para a missão
-                <input id="missionFlightHours" inputmode="decimal" placeholder="Ex.: 3.5, 05, 12.5 ou 12:00" />
-              </label>
-              <fieldset>
-                <legend>Requisitos especiais</legend>
-                <label class="check-row"><input id="missionRequiresArm" type="checkbox" /> Braço de armamento aéreo</label>
-                <label class="check-row"><input id="missionRequiresWinch" type="checkbox" /> Guincho</label>
-                <label class="check-row"><input id="missionRequiresHook" type="checkbox" /> Gancho</label>
-              </fieldset>
-              <div>
-                <div class="inline-label">
-                  <strong>Aeronaves selecionadas</strong>
-                  <span id="availableAircraftHint"></span>
+                <div>
+                  <h2>Missões</h2>
+                  <p class="muted">Cadastro e atualização em janela própria.</p>
                 </div>
-                <div class="aircraft-slots" id="aircraftSlots"></div>
+                <button class="primary-button" id="openMissionFormButton" type="button">Criar missão</button>
               </div>
-              <label>Detalhes/observações<textarea id="missionDetails" rows="4"></textarea></label>
-              <button class="primary-button" type="submit">Salvar missão</button>
-            </form>
+            </div>
 
             <div class="panel">
               <div class="form-heading">
                 <h2>Missões cadastradas</h2>
-                <button class="secondary-button" id="openTextImportButton" type="button">Incluir por texto</button>
+                <div class="stacked-actions">
+                  <button class="primary-button" id="openMissionFormButtonList" type="button">Nova missão</button>
+                  <button class="secondary-button" id="openTextImportButton" type="button">Incluir por texto</button>
+                </div>
               </div>
               <div class="mission-filter" role="group" aria-label="Filtrar missões">
-                <button class="filter-button active" type="button" data-mission-filter="all">Todas</button>
-                <button class="filter-button" type="button" data-mission-filter="planned">Ativas</button>
+                <button class="filter-button active" type="button" data-mission-filter="planned">Ativas</button>
+                <button class="filter-button" type="button" data-mission-filter="all">Todas</button>
                 <button class="filter-button" type="button" data-mission-filter="cancelled">Canceladas</button>
               </div>
               <div class="list" id="missionsList"></div>
@@ -197,57 +166,23 @@
 
         <section class="view" id="aircraftView">
           <div class="grid-layout">
-            <form class="panel" id="aircraftForm">
+            <div class="panel compact-action-panel">
               <div class="form-heading">
-                <h2 id="aircraftFormTitle">Cadastrar aeronave</h2>
-                <button class="ghost-button" id="clearAircraftFormButton" type="button">Limpar</button>
+                <div>
+                  <h2>Aeronaves</h2>
+                  <p class="muted">Use os botões para cadastrar aeronaves ou bloqueios temporários.</p>
+                </div>
+                <div class="stacked-actions">
+                  <button class="primary-button" id="openAircraftFormButton" type="button">Cadastrar aeronave</button>
+                  <button class="secondary-button" id="openUnavailabilityFormButton" type="button">Indisponibilidade temporária</button>
+                </div>
               </div>
-              <input id="aircraftId" type="hidden" />
-              <label>Numeral da aeronave<input id="aircraftNumber" required /></label>
-              <label>Situação
-                <select id="aircraftStatus">
-                  <option value="up">Em cima</option>
-                  <option value="down">Baixada</option>
-                </select>
-              </label>
-              <fieldset>
-                <legend>Capacidades</legend>
-                <label class="check-row"><input id="aircraftVfr" type="checkbox" /> VFR</label>
-                <label class="check-row"><input id="aircraftIfr" type="checkbox" /> IFR</label>
-                <label class="check-row"><input id="aircraftOvn" type="checkbox" /> OVN</label>
-                <label class="check-row"><input id="aircraftArm" type="checkbox" /> Braço de armamento aéreo</label>
-                <label class="check-row"><input id="aircraftWinch" type="checkbox" /> Guincho</label>
-                <label class="check-row"><input id="aircraftHook" type="checkbox" /> Gancho</label>
-              </fieldset>
-              <label>HDV disponível<input id="aircraftHdv" placeholder="Ex.: 12h30, 40 horas ou 18:00" /></label>
-              <label>Detalhes/observações<textarea id="aircraftDetails" rows="4"></textarea></label>
-              <button class="primary-button" type="submit">Salvar aeronave</button>
-            </form>
+            </div>
 
             <div class="panel">
               <h2>Aeronaves cadastradas</h2>
               <div class="list" id="aircraftList"></div>
             </div>
-
-            <form class="panel" id="unavailabilityForm">
-              <div class="form-heading">
-                <h2 id="unavailabilityFormTitle">Indisponibilidade temporária</h2>
-                <button class="ghost-button" id="clearUnavailabilityFormButton" type="button">Limpar</button>
-              </div>
-              <input id="unavailabilityId" type="hidden" />
-              <label>Aeronave
-                <select id="unavailabilityAircraft" required></select>
-              </label>
-              <div class="two-columns">
-                <label>Data inicial<input id="unavailabilityStart" type="date" required /></label>
-                <label>Data final<input id="unavailabilityEnd" type="date" required /></label>
-              </div>
-              <label>Motivo
-                <input id="unavailabilityReason" placeholder="Ex.: manutenção, inspeção, pane..." />
-              </label>
-              <label>Observações<textarea id="unavailabilityNotes" rows="3"></textarea></label>
-              <button class="primary-button" type="submit">Salvar indisponibilidade</button>
-            </form>
 
             <div class="panel">
               <h2>Indisponibilidades cadastradas</h2>
@@ -339,6 +274,111 @@
         </section>
       </main>
     </div>
+
+    <dialog id="missionFormDialog" class="wide-dialog">
+      <div class="modal-header">
+        <h2 id="missionFormTitle">Cadastrar missão</h2>
+        <button class="icon-button" id="closeMissionFormDialogButton" type="button" aria-label="Fechar">×</button>
+      </div>
+      <form class="review-form" id="missionForm">
+              <input id="missionId" type="hidden" />
+              <label>Nome da missão<input id="missionName" required /></label>
+              <div class="two-columns">
+                <label>Data inicial<input id="missionStart" type="date" required /></label>
+                <label>Data final<input id="missionEnd" type="date" required /></label>
+              </div>
+              <label>Local<input id="missionLocation" /></label>
+              <div class="two-columns">
+                <label>Tipo de voo
+                  <select id="missionFlightType">
+                    <option value="VFR">VFR</option>
+                    <option value="IFR">IFR</option>
+                    <option value="OVN">OVN</option>
+                  </select>
+                </label>
+                <label>Quantidade de aeronaves
+                  <input id="missionAircraftCount" min="1" type="number" value="1" />
+                </label>
+              </div>
+              <label>HDV disponível para a missão
+                <input id="missionFlightHours" inputmode="decimal" placeholder="Ex.: 3.5, 05, 12.5 ou 12:00" />
+              </label>
+              <fieldset>
+                <legend>Requisitos especiais</legend>
+                <label class="check-row"><input id="missionRequiresArm" type="checkbox" /> Braço de armamento aéreo</label>
+                <label class="check-row"><input id="missionRequiresWinch" type="checkbox" /> Guincho</label>
+                <label class="check-row"><input id="missionRequiresHook" type="checkbox" /> Gancho</label>
+              </fieldset>
+              <div>
+                <div class="inline-label">
+                  <strong>Aeronaves selecionadas</strong>
+                  <span id="availableAircraftHint"></span>
+                </div>
+                <div class="aircraft-slots" id="aircraftSlots"></div>
+              </div>
+              <label>Detalhes/observações<textarea id="missionDetails" rows="4"></textarea></label>
+              <button class="primary-button" type="submit">Salvar missão</button>
+      </form>
+
+
+    </dialog>
+
+    <dialog id="aircraftFormDialog">
+      <div class="modal-header">
+        <h2 id="aircraftFormTitle">Cadastrar aeronave</h2>
+        <button class="icon-button" id="closeAircraftFormDialogButton" type="button" aria-label="Fechar">×</button>
+      </div>
+      <form class="review-form" id="aircraftForm">
+
+              <input id="aircraftId" type="hidden" />
+              <label>Numeral da aeronave<input id="aircraftNumber" required /></label>
+              <label>Situação
+                <select id="aircraftStatus">
+                  <option value="up">Em cima</option>
+                  <option value="down">Baixada</option>
+                </select>
+              </label>
+              <fieldset>
+                <legend>Capacidades</legend>
+                <label class="check-row"><input id="aircraftVfr" type="checkbox" /> VFR</label>
+                <label class="check-row"><input id="aircraftIfr" type="checkbox" /> IFR</label>
+                <label class="check-row"><input id="aircraftOvn" type="checkbox" /> OVN</label>
+                <label class="check-row"><input id="aircraftArm" type="checkbox" /> Braço de armamento aéreo</label>
+                <label class="check-row"><input id="aircraftWinch" type="checkbox" /> Guincho</label>
+                <label class="check-row"><input id="aircraftHook" type="checkbox" /> Gancho</label>
+              </fieldset>
+              <label>HDV disponível<input id="aircraftHdv" placeholder="Ex.: 12h30, 40 horas ou 18:00" /></label>
+              <label>Detalhes/observações<textarea id="aircraftDetails" rows="4"></textarea></label>
+              <button class="primary-button" type="submit">Salvar aeronave</button>
+      </form>
+
+
+    </dialog>
+
+    <dialog id="unavailabilityFormDialog">
+      <div class="modal-header">
+        <h2 id="unavailabilityFormTitle">Indisponibilidade temporária</h2>
+        <button class="icon-button" id="closeUnavailabilityFormDialogButton" type="button" aria-label="Fechar">×</button>
+      </div>
+      <form class="review-form" id="unavailabilityForm">
+
+              <input id="unavailabilityId" type="hidden" />
+              <label>Aeronave
+                <select id="unavailabilityAircraft" required></select>
+              </label>
+              <div class="two-columns">
+                <label>Data inicial<input id="unavailabilityStart" type="date" required /></label>
+                <label>Data final<input id="unavailabilityEnd" type="date" required /></label>
+              </div>
+              <label>Motivo
+                <input id="unavailabilityReason" placeholder="Ex.: manutenção, inspeção, pane..." />
+              </label>
+              <label>Observações<textarea id="unavailabilityNotes" rows="3"></textarea></label>
+              <button class="primary-button" type="submit">Salvar indisponibilidade</button>
+      </form>
+
+
+    </dialog>
 
     <dialog id="missionDialog">
       <div class="modal-header">
