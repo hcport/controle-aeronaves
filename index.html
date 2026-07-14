@@ -512,7 +512,11 @@
       <form id="cloudAuthForm" class="review-form">
         <p class="muted">Use o mesmo e-mail no MacBook, iPad e iPhone para ver os mesmos dados.</p>
         <label>E-mail<input id="cloudEmail" type="email" required placeholder="seu@email.com" /></label>
-        <button class="primary-button" type="submit">Enviar link de acesso</button>
+        <label>Senha<input id="cloudPassword" type="password" required minlength="6" placeholder="Mínimo de 6 caracteres" /></label>
+        <div class="modal-actions">
+          <button class="primary-button" type="submit">Entrar</button>
+          <button class="secondary-button" id="cloudSignupButton" type="button">Criar acesso</button>
+        </div>
       </form>
     </dialog>
 

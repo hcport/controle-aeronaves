@@ -208,6 +208,7 @@ function bindEvents() {
   document.getElementById("cloudSyncButton").addEventListener("click", syncCloudNow);
   document.getElementById("closeCloudAuthButton").addEventListener("click", () => els.cloudAuthDialog.close());
   document.getElementById("cloudAuthForm").addEventListener("submit", signInCloudWithEmail);
+  document.getElementById("cloudSignupButton").addEventListener("click", signUpCloudWithEmail);
   loadSheetConfigForm();
   initSupabase();
   window.setInterval(refreshDashboardIfDateChanged, 60000);
@@ -356,22 +357,19 @@ async function initSupabase() {
   });
 
   const { data } = await state.cloud.client.auth.getSession();
-  await handleCloudSession(data?.session || null, { loadRemote: true });
+  await handleCloudSession(data?.session || null);
+  await loadCloudSnapshot({ publicRead: true, silent: true });
   state.cloud.client.auth.onAuthStateChange((_event, session) => {
-    handleCloudSession(session, { loadRemote: true });
+    handleCloudSession(session);
   });
 }
 
-async function handleCloudSession(session, options = {}) {
+async function handleCloudSession(session) {
   state.cloud.session = session || null;
   state.cloud.user = session?.user || null;
   state.cloud.initialized = true;
   updateCloudControls();
-  if (state.cloud.user && options.loadRemote) {
-    await loadCloudSnapshot();
-  } else {
-    setCloudStatus("Nuvem: entre para sincronizar.", "muted");
-  }
+  setCloudStatus(state.cloud.user ? "Nuvem conectada para edição." : "Visualização pública.", state.cloud.user ? "ok" : "muted");
 }
 
 function openCloudAuthDialog() {
@@ -383,21 +381,42 @@ async function signInCloudWithEmail(event) {
   event.preventDefault();
   if (!state.cloud.client) return showToast("Supabase não carregou neste navegador.");
   const email = document.getElementById("cloudEmail").value.trim();
-  if (!email) return showToast("Informe seu e-mail.");
-  setCloudStatus("Enviando link de acesso...", "syncing");
-  const { error } = await state.cloud.client.auth.signInWithOtp({
+  const password = document.getElementById("cloudPassword").value;
+  if (!email || !password) return showToast("Informe e-mail e senha.");
+  setCloudStatus("Entrando na nuvem...", "syncing");
+  const { error } = await state.cloud.client.auth.signInWithPassword({
     email,
+    password,
+  });
+  if (error) {
+    setCloudStatus("Erro no login da nuvem.", "danger");
+    return showToast(error.message || "Não foi possível entrar.");
+  }
+  els.cloudAuthDialog.close();
+  showToast("Login realizado.");
+}
+
+async function signUpCloudWithEmail() {
+  if (!state.cloud.client) return showToast("Supabase não carregou neste navegador.");
+  const email = document.getElementById("cloudEmail").value.trim();
+  const password = document.getElementById("cloudPassword").value;
+  if (!email || !password) return showToast("Informe e-mail e senha.");
+  if (password.length < 6) return showToast("A senha precisa ter pelo menos 6 caracteres.");
+  setCloudStatus("Criando acesso...", "syncing");
+  const { error } = await state.cloud.client.auth.signUp({
+    email,
+    password,
     options: {
       emailRedirectTo: window.location.origin + window.location.pathname,
     },
   });
   if (error) {
-    setCloudStatus("Erro no login da nuvem.", "danger");
-    return showToast(error.message || "Não foi possível enviar o link de acesso.");
+    setCloudStatus("Erro ao criar acesso.", "danger");
+    return showToast(error.message || "Não foi possível criar o acesso.");
   }
   els.cloudAuthDialog.close();
-  setCloudStatus("Verifique seu e-mail para entrar.", "syncing");
-  showToast("Link de acesso enviado para o e-mail.");
+  setCloudStatus("Acesso criado. Confirme o e-mail, se solicitado.", "syncing");
+  showToast("Acesso criado. Verifique seu e-mail se o Supabase pedir confirmação.");
 }
 
 async function signOutCloud() {
@@ -411,12 +430,11 @@ async function signOutCloud() {
 }
 
 async function syncCloudNow() {
-  if (!state.cloud.user) return openCloudAuthDialog();
-  await loadCloudSnapshot({ forceAsk: true });
+  await loadCloudSnapshot({ publicRead: true, notify: true });
 }
 
 async function loadCloudSnapshot(options = {}) {
-  if (!state.cloud.client || !state.cloud.user || state.cloud.loading) return;
+  if (!state.cloud.client || state.cloud.loading) return;
   state.cloud.loading = true;
   setCloudStatus("Carregando dados da nuvem...", "syncing");
   try {
@@ -427,29 +445,24 @@ async function loadCloudSnapshot(options = {}) {
       .maybeSingle();
     if (error) throw error;
     if (!data?.value) {
-      await saveCloudSnapshot({ immediate: true });
-      setCloudStatus("Nuvem conectada. Dados locais enviados.", "ok");
+      if (state.cloud.user) {
+        await saveCloudSnapshot({ immediate: true });
+        setCloudStatus("Nuvem conectada. Dados locais enviados.", "ok");
+      } else {
+        setCloudStatus("Nuvem sem dados publicados.", "muted");
+      }
       return;
     }
 
     state.cloud.snapshotId = data.id;
-    const hasLocalData = state.aircraft.length || state.missions.length || state.unavailability.length;
-    const shouldLoadRemote = options.forceAsk
-      ? confirm("Carregar os dados da nuvem neste navegador? Os dados locais atuais serão substituídos pela cópia online.")
-      : !hasLocalData || confirm("Existem dados salvos na nuvem. Deseja carregar a cópia online neste navegador?");
-
-    if (shouldLoadRemote) {
-      applySnapshot(data.value);
-      state.cloud.lastLoadedAt = new Date().toISOString();
-      renderAll();
-      setCloudStatus(`Nuvem conectada · carregada ${formatDateTime(state.cloud.lastLoadedAt)}`, "ok");
-      showToast("Dados carregados da nuvem.");
-    } else {
-      setCloudStatus("Nuvem conectada. Dados locais mantidos.", "ok");
-    }
+    applySnapshot(data.value);
+    state.cloud.lastLoadedAt = new Date().toISOString();
+    renderAll();
+    setCloudStatus(`${state.cloud.user ? "Nuvem conectada" : "Visualização pública"} · atualizada ${formatDateTime(state.cloud.lastLoadedAt)}`, state.cloud.user ? "ok" : "muted");
+    if (options.notify) showToast("Dados atualizados da nuvem.");
   } catch (error) {
     setCloudStatus("Erro ao ler a nuvem.", "danger");
-    showToast(error.message || "Não foi possível carregar dados da nuvem.");
+    if (!options.silent) showToast(error.message || "Não foi possível carregar dados da nuvem.");
   } finally {
     state.cloud.loading = false;
     updateCloudControls();
@@ -502,13 +515,20 @@ function updateCloudControls() {
   const logged = !!state.cloud.user;
   document.getElementById("cloudLoginButton").hidden = logged;
   document.getElementById("cloudLogoutButton").hidden = !logged;
-  document.getElementById("cloudSyncButton").textContent = logged ? "Sincronizar" : "Entrar";
+  document.getElementById("cloudSyncButton").textContent = "Atualizar";
 }
 
 function setCloudStatus(text, tone = "muted") {
   if (!els.cloudStatus) return;
   els.cloudStatus.textContent = text;
   els.cloudStatus.className = `cloud-status cloud-status-${tone}`;
+}
+
+function requireCloudEditor(action = "alterar os dados") {
+  if (state.cloud.user) return true;
+  showToast(`Entre com e-mail autorizado para ${action}.`);
+  openCloudAuthDialog();
+  return false;
 }
 
 function uid(prefix) {
@@ -536,6 +556,7 @@ function renderAll() {
 
 function saveAircraftFromForm(event) {
   event.preventDefault();
+  if (!requireCloudEditor("salvar aeronaves")) return;
   const id = document.getElementById("aircraftId").value || uid("aircraft");
   const record = {
     id,
@@ -590,6 +611,7 @@ function editAircraft(id) {
 }
 
 function deleteAircraft(id) {
+  if (!requireCloudEditor("excluir aeronaves")) return;
   const used = state.missions.some((mission) => mission.aircraftAssigned.includes(id));
   if (used && !confirm("Esta aeronave está prevista em missão. Excluir mesmo assim?")) return;
   state.aircraft = state.aircraft.filter((item) => item.id !== id);
@@ -657,6 +679,7 @@ function renderUnavailabilityAircraftOptions() {
 
 function saveUnavailabilityFromForm(event) {
   event.preventDefault();
+  if (!requireCloudEditor("salvar indisponibilidades")) return;
   const id = document.getElementById("unavailabilityId").value || uid("unavailability");
   const record = normalizeUnavailability({
     id,
@@ -714,6 +737,7 @@ function editUnavailability(id) {
 }
 
 function deleteUnavailability(id) {
+  if (!requireCloudEditor("excluir indisponibilidades")) return;
   if (!confirm("Excluir esta indisponibilidade?")) return;
   state.unavailability = state.unavailability.filter((item) => item.id !== id);
   persist();
@@ -779,6 +803,7 @@ function missionFormData(idOverride) {
 
 function saveMissionFromForm(event) {
   event.preventDefault();
+  if (!requireCloudEditor("salvar missões")) return;
   const record = missionFormData();
   if (!validateMission(record)) return;
   upsertMission(record);
@@ -846,6 +871,7 @@ function editMission(id) {
 }
 
 function deleteMission(id) {
+  if (!requireCloudEditor("excluir missões")) return;
   if (!confirm("Excluir esta missão?")) return;
   state.missions = state.missions.filter((item) => item.id !== id);
   persist();
@@ -855,6 +881,7 @@ function deleteMission(id) {
 }
 
 function requestCancelMission(id) {
+  if (!requireCloudEditor("cancelar missões")) return;
   const mission = state.missions.find((item) => item.id === id);
   if (!mission) return;
   state.pendingStatusMissionId = id;
@@ -882,6 +909,7 @@ function confirmCancelMission() {
 }
 
 function requestReactivateMission(id) {
+  if (!requireCloudEditor("reativar missões")) return;
   const mission = state.missions.find((item) => item.id === id);
   if (!mission) return;
   state.pendingStatusMissionId = id;
@@ -1856,6 +1884,7 @@ function parseMissionText(text) {
 
 function saveReviewMission(event) {
   event.preventDefault();
+  if (!requireCloudEditor("salvar missões importadas por texto")) return;
   const mission = {
     id: uid("mission"),
     name: document.getElementById("reviewName").value.trim(),
@@ -2038,6 +2067,7 @@ function importedMissionFromReview() {
 
 function reviewImportedMission(event) {
   event.preventDefault();
+  if (!requireCloudEditor("salvar missões importadas de PDF")) return;
   const mission = importedMissionFromReview();
   if (!validateMission(mission)) return;
   const confirmationRequired = document.getElementById("pdfAirUnitConfirmation").classList.contains("visible");
@@ -2171,6 +2201,7 @@ function comparisonMarkup(mission) {
 }
 
 function saveImportedAsNew() {
+  if (!requireCloudEditor("cadastrar missões importadas")) return;
   if (!state.pendingImportedMission) return;
   const mission = {
     ...state.pendingImportedMission,
@@ -2182,6 +2213,7 @@ function saveImportedAsNew() {
 }
 
 function updateMissionFromImport() {
+  if (!requireCloudEditor("atualizar missões importadas")) return;
   if (!state.pendingImportedMission) return;
   const selectedId = els.duplicateCandidateSelect.value || state.similarMissions[0]?.mission.id;
   const existing = state.missions.find((mission) => mission.id === selectedId);
@@ -2308,6 +2340,7 @@ function sheetConfigFromForm() {
 
 function saveSheetConfig(event) {
   event.preventDefault();
+  if (!requireCloudEditor("alterar configuração do Google Sheets")) return;
   state.sheetConfig = sheetConfigFromForm();
   persist();
   renderSheetSyncStatus();
@@ -2342,6 +2375,7 @@ async function testSheetConnection() {
 }
 
 async function syncGoogleSheetMissions() {
+  if (!requireCloudEditor("sincronizar missões do Google Sheets")) return;
   state.sheetConfig = sheetConfigFromForm();
   els.sheetSyncStatus.textContent = "Lendo Google Sheets...";
   try {
@@ -2956,6 +2990,7 @@ function sheetSyncItemMarkup(item, index) {
 }
 
 function applyMissionSync() {
+  if (!requireCloudEditor("aplicar sincronização do Google Sheets")) return;
   if (!state.pendingSheetSync) return;
   state.lastSyncBackup = {
     missions: JSON.parse(JSON.stringify(state.missions)),
@@ -3075,6 +3110,7 @@ function saveSheetBinding(mission) {
 }
 
 function undoLastSheetSync() {
+  if (!requireCloudEditor("desfazer sincronização")) return;
   if (!state.lastSyncBackup) return showToast("Não há sincronização para desfazer nesta sessão.");
   state.missions = state.lastSyncBackup.missions.map(normalizeMission);
   state.sheetBindings = state.lastSyncBackup.sheetBindings;
@@ -3159,6 +3195,10 @@ function exportBackup() {
 }
 
 function importBackup(event) {
+  if (!requireCloudEditor("importar backup")) {
+    event.target.value = "";
+    return;
+  }
   const file = event.target.files?.[0];
   if (!file) return;
   const reader = new FileReader();
