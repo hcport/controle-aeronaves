@@ -1,4 +1,7 @@
 const STORAGE_KEY = "plannerAeronavesMissoes:v1";
+const SUPABASE_URL = "https://jzmepevxctuennrdzoaw.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6bWVwZXZ4Y3R1ZW5ucmR6b2F3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NzE5NjIsImV4cCI6MjA5OTU0Nzk2Mn0.qB5lwAl4GWnplNgYG1M7rjMJ8U2_thiVS442z-OXcJc";
+const CLOUD_SNAPSHOT_KEY = "planner_snapshot_v1";
 
 const state = {
   aircraft: [],
@@ -16,6 +19,18 @@ const state = {
   lastSyncBackup: null,
   sheetBindings: [],
   syncHistory: [],
+  cloud: {
+    client: null,
+    session: null,
+    user: null,
+    snapshotId: "",
+    saving: false,
+    loading: false,
+    initialized: false,
+    saveTimer: null,
+    lastSavedAt: "",
+    lastLoadedAt: "",
+  },
   sheetConfig: {
     displayName: "Planejamento de Missões",
     spreadsheetId: "105mcoOMetYrGevBGq3YRWDmROYG3cj1pZZchXlF7sBA",
@@ -86,6 +101,8 @@ function bindElements() {
     "sheetSyncReview",
     "sheetSyncStatus",
     "sheetSyncHistory",
+    "cloudStatus",
+    "cloudAuthDialog",
     "toast",
   ].forEach((id) => {
     els[id] = document.getElementById(id);
@@ -186,7 +203,13 @@ function bindEvents() {
 
   document.getElementById("exportBackupButton").addEventListener("click", exportBackup);
   document.getElementById("importBackupInput").addEventListener("change", importBackup);
+  document.getElementById("cloudLoginButton").addEventListener("click", openCloudAuthDialog);
+  document.getElementById("cloudLogoutButton").addEventListener("click", signOutCloud);
+  document.getElementById("cloudSyncButton").addEventListener("click", syncCloudNow);
+  document.getElementById("closeCloudAuthButton").addEventListener("click", () => els.cloudAuthDialog.close());
+  document.getElementById("cloudAuthForm").addEventListener("submit", signInCloudWithEmail);
   loadSheetConfigForm();
+  initSupabase();
   window.setInterval(refreshDashboardIfDateChanged, 60000);
   window.setInterval(runAutomaticSheetSync, 60000);
 }
@@ -284,7 +307,7 @@ function normalizeUnavailability(item) {
 }
 
 function persist() {
-  // Mantem o app sem servidor: tudo fica no navegador do proprio usuario.
+  // Mantem uma copia local para funcionamento offline e envia para a nuvem quando houver login.
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
     aircraft: state.aircraft,
     missions: state.missions,
@@ -294,6 +317,198 @@ function persist() {
     syncHistory: state.syncHistory,
     updatedAt: new Date().toISOString(),
   }));
+  scheduleCloudSave();
+}
+
+function appSnapshot() {
+  return {
+    aircraft: state.aircraft,
+    missions: state.missions,
+    unavailability: state.unavailability,
+    sheetConfig: state.sheetConfig,
+    sheetBindings: state.sheetBindings,
+    syncHistory: state.syncHistory,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function applySnapshot(snapshot) {
+  state.aircraft = Array.isArray(snapshot.aircraft) ? snapshot.aircraft : [];
+  state.missions = Array.isArray(snapshot.missions) ? snapshot.missions.map(normalizeMission) : [];
+  state.unavailability = Array.isArray(snapshot.unavailability) ? snapshot.unavailability.map(normalizeUnavailability) : [];
+  state.sheetConfig = { ...state.sheetConfig, ...(snapshot.sheetConfig || {}) };
+  state.sheetBindings = Array.isArray(snapshot.sheetBindings) ? snapshot.sheetBindings : [];
+  state.syncHistory = Array.isArray(snapshot.syncHistory) ? snapshot.syncHistory : [];
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(appSnapshot()));
+}
+
+async function initSupabase() {
+  if (!window.supabase?.createClient) {
+    setCloudStatus("Nuvem indisponível: biblioteca não carregada.", "danger");
+    return;
+  }
+  state.cloud.client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  });
+
+  const { data } = await state.cloud.client.auth.getSession();
+  await handleCloudSession(data?.session || null, { loadRemote: true });
+  state.cloud.client.auth.onAuthStateChange((_event, session) => {
+    handleCloudSession(session, { loadRemote: true });
+  });
+}
+
+async function handleCloudSession(session, options = {}) {
+  state.cloud.session = session || null;
+  state.cloud.user = session?.user || null;
+  state.cloud.initialized = true;
+  updateCloudControls();
+  if (state.cloud.user && options.loadRemote) {
+    await loadCloudSnapshot();
+  } else {
+    setCloudStatus("Nuvem: entre para sincronizar.", "muted");
+  }
+}
+
+function openCloudAuthDialog() {
+  document.getElementById("cloudEmail").value = state.cloud.user?.email || "";
+  els.cloudAuthDialog.showModal();
+}
+
+async function signInCloudWithEmail(event) {
+  event.preventDefault();
+  if (!state.cloud.client) return showToast("Supabase não carregou neste navegador.");
+  const email = document.getElementById("cloudEmail").value.trim();
+  if (!email) return showToast("Informe seu e-mail.");
+  setCloudStatus("Enviando link de acesso...", "syncing");
+  const { error } = await state.cloud.client.auth.signInWithOtp({
+    email,
+    options: {
+      emailRedirectTo: window.location.origin + window.location.pathname,
+    },
+  });
+  if (error) {
+    setCloudStatus("Erro no login da nuvem.", "danger");
+    return showToast(error.message || "Não foi possível enviar o link de acesso.");
+  }
+  els.cloudAuthDialog.close();
+  setCloudStatus("Verifique seu e-mail para entrar.", "syncing");
+  showToast("Link de acesso enviado para o e-mail.");
+}
+
+async function signOutCloud() {
+  if (!state.cloud.client) return;
+  await state.cloud.client.auth.signOut();
+  state.cloud.session = null;
+  state.cloud.user = null;
+  state.cloud.snapshotId = "";
+  updateCloudControls();
+  setCloudStatus("Nuvem: desconectada.", "muted");
+}
+
+async function syncCloudNow() {
+  if (!state.cloud.user) return openCloudAuthDialog();
+  await loadCloudSnapshot({ forceAsk: true });
+}
+
+async function loadCloudSnapshot(options = {}) {
+  if (!state.cloud.client || !state.cloud.user || state.cloud.loading) return;
+  state.cloud.loading = true;
+  setCloudStatus("Carregando dados da nuvem...", "syncing");
+  try {
+    const { data, error } = await state.cloud.client
+      .from("app_settings")
+      .select("id,value,updated_at")
+      .eq("key", CLOUD_SNAPSHOT_KEY)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data?.value) {
+      await saveCloudSnapshot({ immediate: true });
+      setCloudStatus("Nuvem conectada. Dados locais enviados.", "ok");
+      return;
+    }
+
+    state.cloud.snapshotId = data.id;
+    const hasLocalData = state.aircraft.length || state.missions.length || state.unavailability.length;
+    const shouldLoadRemote = options.forceAsk
+      ? confirm("Carregar os dados da nuvem neste navegador? Os dados locais atuais serão substituídos pela cópia online.")
+      : !hasLocalData || confirm("Existem dados salvos na nuvem. Deseja carregar a cópia online neste navegador?");
+
+    if (shouldLoadRemote) {
+      applySnapshot(data.value);
+      state.cloud.lastLoadedAt = new Date().toISOString();
+      renderAll();
+      setCloudStatus(`Nuvem conectada · carregada ${formatDateTime(state.cloud.lastLoadedAt)}`, "ok");
+      showToast("Dados carregados da nuvem.");
+    } else {
+      setCloudStatus("Nuvem conectada. Dados locais mantidos.", "ok");
+    }
+  } catch (error) {
+    setCloudStatus("Erro ao ler a nuvem.", "danger");
+    showToast(error.message || "Não foi possível carregar dados da nuvem.");
+  } finally {
+    state.cloud.loading = false;
+    updateCloudControls();
+  }
+}
+
+function scheduleCloudSave() {
+  if (!state.cloud.user || state.cloud.loading) return;
+  window.clearTimeout(state.cloud.saveTimer);
+  state.cloud.saveTimer = window.setTimeout(() => {
+    saveCloudSnapshot();
+  }, 900);
+}
+
+async function saveCloudSnapshot(options = {}) {
+  if (!state.cloud.client || !state.cloud.user || state.cloud.saving) return;
+  state.cloud.saving = true;
+  setCloudStatus("Salvando na nuvem...", "syncing");
+  try {
+    const snapshot = appSnapshot();
+    let error;
+    if (state.cloud.snapshotId) {
+      ({ error } = await state.cloud.client
+        .from("app_settings")
+        .update({ value: snapshot, updated_at: new Date().toISOString() })
+        .eq("id", state.cloud.snapshotId));
+    } else {
+      const result = await state.cloud.client
+        .from("app_settings")
+        .insert({ key: CLOUD_SNAPSHOT_KEY, value: snapshot })
+        .select("id")
+        .single();
+      error = result.error;
+      if (result.data?.id) state.cloud.snapshotId = result.data.id;
+    }
+    if (error) throw error;
+    state.cloud.lastSavedAt = new Date().toISOString();
+    setCloudStatus(`Nuvem salva · ${formatDateTime(state.cloud.lastSavedAt)}`, "ok");
+    if (options.immediate) renderAll();
+  } catch (error) {
+    setCloudStatus("Erro ao salvar na nuvem.", "danger");
+    showToast(error.message || "Não foi possível salvar na nuvem.");
+  } finally {
+    state.cloud.saving = false;
+    updateCloudControls();
+  }
+}
+
+function updateCloudControls() {
+  const logged = !!state.cloud.user;
+  document.getElementById("cloudLoginButton").hidden = logged;
+  document.getElementById("cloudLogoutButton").hidden = !logged;
+  document.getElementById("cloudSyncButton").textContent = logged ? "Sincronizar" : "Entrar";
+}
+
+function setCloudStatus(text, tone = "muted") {
+  if (!els.cloudStatus) return;
+  els.cloudStatus.textContent = text;
+  els.cloudStatus.className = `cloud-status cloud-status-${tone}`;
 }
 
 function uid(prefix) {

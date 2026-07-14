@@ -14,6 +14,10 @@
           <p>Controle mensal de disponibilidade, missões e previsão de aeronaves.</p>
         </div>
         <div class="topbar-actions">
+          <div class="cloud-status" id="cloudStatus">Nuvem: offline</div>
+          <button class="secondary-button" id="cloudLoginButton" type="button">Entrar</button>
+          <button class="secondary-button" id="cloudSyncButton" type="button">Sincronizar</button>
+          <button class="ghost-button" id="cloudLogoutButton" type="button" hidden>Sair</button>
           <button class="secondary-button" id="exportBackupButton" type="button">Exportar JSON</button>
           <label class="secondary-button file-button" for="importBackupInput">Importar JSON</label>
           <input id="importBackupInput" type="file" accept="application/json,.json" hidden />
@@ -500,8 +504,21 @@
       <div class="modal-actions status-dialog-actions" id="statusDialogActions"></div>
     </dialog>
 
+    <dialog id="cloudAuthDialog">
+      <div class="modal-header">
+        <h2>Entrar para sincronizar</h2>
+        <button class="icon-button" id="closeCloudAuthButton" type="button" aria-label="Fechar">×</button>
+      </div>
+      <form id="cloudAuthForm" class="review-form">
+        <p class="muted">Use o mesmo e-mail no MacBook, iPad e iPhone para ver os mesmos dados.</p>
+        <label>E-mail<input id="cloudEmail" type="email" required placeholder="seu@email.com" /></label>
+        <button class="primary-button" type="submit">Enviar link de acesso</button>
+      </form>
+    </dialog>
+
     <div class="toast" id="toast" role="status"></div>
     <script src="vendor/pdfjs/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="pdf-import.js"></script>
     <script src="app.js"></script>
   </body>

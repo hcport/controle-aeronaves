@@ -81,8 +81,40 @@ h2 {
 .month-controls,
 .modal-actions,
 .stacked-actions {
+  align-items: center;
   display: flex;
   gap: 10px;
+}
+
+.cloud-status {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  max-width: 260px;
+  overflow: hidden;
+  padding: 8px 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cloud-status-ok {
+  background: #e9f7ef;
+  border-color: #a7d9bf;
+  color: #17653f;
+}
+
+.cloud-status-syncing {
+  background: #fff7e6;
+  border-color: #e7c26d;
+  color: #7a5411;
+}
+
+.cloud-status-danger {
+  background: #fff0f0;
+  border-color: #e0a1a1;
+  color: #8a2727;
 }
 
 .import-description {
