@@ -251,6 +251,10 @@ function normalizeMission(mission) {
   const assigned = Array.isArray(mission.aircraftAssigned)
     ? mission.aircraftAssigned
     : Array.isArray(mission.aircraftIds) ? mission.aircraftIds : [];
+  const normalizedAssigned = [...new Set(assigned.map((item) => String(item).trim()).filter(Boolean))];
+  const rawDailyPlanning = Array.isArray(mission.dailyPlanning) ? mission.dailyPlanning : [];
+  const hasHiddenDailyAircraft = rawDailyPlanning.some((day) => Array.isArray(day.aircraftAssigned) && day.aircraftAssigned.length);
+  const shouldDropHiddenDailyPlanning = !normalizedAssigned.length && hasHiddenDailyAircraft;
   const rawRequired = Number(mission.aircraftRequired ?? mission.aircraftCount ?? 1);
   const requiredSource = String(mission.aircraftRequiredSource || mission.aircraftQuantitySource || "manual");
   return {
@@ -260,10 +264,10 @@ function normalizeMission(mission) {
     aircraftRequired: Math.max(requiredSource === "not-identified" ? 0 : 1, rawRequired || 0),
     aircraftRequiredSource: requiredSource,
     aircraftQuantitySource: String(mission.aircraftQuantitySource || requiredSource),
-    aircraftAssigned: [...new Set(assigned.map((item) => String(item).trim()).filter(Boolean))],
-    aircraftSchedule: Array.isArray(mission.aircraftSchedule) ? mission.aircraftSchedule : [],
-    crewSchedule: Array.isArray(mission.crewSchedule) ? mission.crewSchedule : [],
-    dailyPlanning: Array.isArray(mission.dailyPlanning) ? mission.dailyPlanning : [],
+    aircraftAssigned: normalizedAssigned,
+    aircraftSchedule: shouldDropHiddenDailyPlanning ? [] : (Array.isArray(mission.aircraftSchedule) ? mission.aircraftSchedule : []),
+    crewSchedule: shouldDropHiddenDailyPlanning ? [] : (Array.isArray(mission.crewSchedule) ? mission.crewSchedule : []),
+    dailyPlanning: shouldDropHiddenDailyPlanning ? [] : rawDailyPlanning,
     scheduleEntries: Array.isArray(mission.scheduleEntries) ? mission.scheduleEntries : [],
     unresolvedRows: Array.isArray(mission.unresolvedRows) ? mission.unresolvedRows : [],
     duplicateAircraftWarnings: Array.isArray(mission.duplicateAircraftWarnings) ? mission.duplicateAircraftWarnings : [],
@@ -812,6 +816,7 @@ function missionFormData(idOverride) {
   const selected = [...document.querySelectorAll(".aircraft-select")]
     .map((select) => select.value)
     .filter(Boolean);
+  const aircraftPlanChanged = hasMissionAircraftPlanChanged(existing, selected);
   return {
     ...existing,
     id: formId,
@@ -827,10 +832,25 @@ function missionFormData(idOverride) {
       hook: document.getElementById("missionRequiresHook").checked,
     },
     aircraftAssigned: [...new Set(selected)],
+    aircraftSchedule: aircraftPlanChanged ? [] : (existing.aircraftSchedule || []),
+    crewSchedule: aircraftPlanChanged ? [] : (existing.crewSchedule || []),
+    dailyPlanning: aircraftPlanChanged ? [] : (existing.dailyPlanning || []),
     flightHoursAvailable: document.getElementById("missionFlightHours").value.trim(),
     details: document.getElementById("missionDetails").value.trim(),
     notes: document.getElementById("missionDetails").value.trim(),
   };
+}
+
+function hasMissionAircraftPlanChanged(existing, selected) {
+  if (!existing?.id) return false;
+  const selectedNumbers = selected.map((ref) => aircraftRefNumber(ref)).filter(Boolean).sort();
+  const existingNumbers = (existing.aircraftAssigned || []).map((ref) => aircraftRefNumber(ref)).filter(Boolean).sort();
+  const selectedKey = selectedNumbers.join("|");
+  const existingKey = existingNumbers.join("|");
+  const countChanged = Number(document.getElementById("missionAircraftCount").value || 1) !== Number(existing.aircraftRequired || 1);
+  const datesChanged = document.getElementById("missionStart").value !== existing.startDate
+    || document.getElementById("missionEnd").value !== existing.endDate;
+  return selectedKey !== existingKey || countChanged || datesChanged;
 }
 
 function saveMissionFromForm(event) {
@@ -1022,7 +1042,9 @@ function closeStatusDialog() {
 function renderAircraftSlots(preselected = null) {
   const count = Math.max(1, Number(document.getElementById("missionAircraftCount").value || 1));
   const mission = missionFormData(document.getElementById("missionId").value || "draft");
-  const currentSelected = preselected || [...document.querySelectorAll(".aircraft-select")].map((select) => select.value);
+  const currentSelected = (preselected || [...document.querySelectorAll(".aircraft-select")].map((select) => select.value))
+    .map((ref) => aircraftRefId(ref))
+    .filter(Boolean);
   const slots = [];
 
   for (let index = 0; index < count; index += 1) {
@@ -3307,6 +3329,13 @@ function aircraftRefNumber(ref) {
   if (!value) return "";
   const aircraft = state.aircraft.find((item) => item.id === value || item.number === value);
   return aircraft?.number || value;
+}
+
+function aircraftRefId(ref) {
+  const value = String(ref || "").trim();
+  if (!value) return "";
+  const aircraft = state.aircraft.find((item) => item.id === value || item.number === value);
+  return aircraft?.id || value;
 }
 
 function aircraftRefMatches(ref, aircraftId) {
