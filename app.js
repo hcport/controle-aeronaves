@@ -236,7 +236,7 @@ function loadData() {
   if (!saved) return;
   try {
     const parsed = JSON.parse(saved);
-    state.aircraft = Array.isArray(parsed.aircraft) ? parsed.aircraft : [];
+    state.aircraft = Array.isArray(parsed.aircraft) ? parsed.aircraft.map(normalizeAircraft) : [];
     state.missions = Array.isArray(parsed.missions) ? parsed.missions.map(normalizeMission) : [];
     state.unavailability = Array.isArray(parsed.unavailability) ? parsed.unavailability.map(normalizeUnavailability) : [];
     state.sheetConfig = { ...state.sheetConfig, ...(parsed.sheetConfig || {}) };
@@ -255,6 +255,15 @@ function normalizeMission(mission) {
   const rawDailyPlanning = Array.isArray(mission.dailyPlanning) ? mission.dailyPlanning : [];
   const hasHiddenDailyAircraft = rawDailyPlanning.some((day) => Array.isArray(day.aircraftAssigned) && day.aircraftAssigned.length);
   const shouldDropHiddenDailyPlanning = !normalizedAssigned.length && hasHiddenDailyAircraft;
+  const assignedNumberSet = new Set(normalizedAssigned.map((ref) => aircraftRefNumber(ref)));
+  const normalizedDailyPlanning = shouldDropHiddenDailyPlanning
+    ? []
+    : rawDailyPlanning.map((day) => ({
+      ...day,
+      aircraftAssigned: assignedNumberSet.size && Array.isArray(day.aircraftAssigned)
+        ? day.aircraftAssigned.filter((ref) => assignedNumberSet.has(aircraftRefNumber(ref)))
+        : (day.aircraftAssigned || []),
+    }));
   const rawRequired = Number(mission.aircraftRequired ?? mission.aircraftCount ?? 1);
   const requiredSource = String(mission.aircraftRequiredSource || mission.aircraftQuantitySource || "manual");
   return {
@@ -267,7 +276,7 @@ function normalizeMission(mission) {
     aircraftAssigned: normalizedAssigned,
     aircraftSchedule: shouldDropHiddenDailyPlanning ? [] : (Array.isArray(mission.aircraftSchedule) ? mission.aircraftSchedule : []),
     crewSchedule: shouldDropHiddenDailyPlanning ? [] : (Array.isArray(mission.crewSchedule) ? mission.crewSchedule : []),
-    dailyPlanning: shouldDropHiddenDailyPlanning ? [] : rawDailyPlanning,
+    dailyPlanning: normalizedDailyPlanning,
     scheduleEntries: Array.isArray(mission.scheduleEntries) ? mission.scheduleEntries : [],
     unresolvedRows: Array.isArray(mission.unresolvedRows) ? mission.unresolvedRows : [],
     duplicateAircraftWarnings: Array.isArray(mission.duplicateAircraftWarnings) ? mission.duplicateAircraftWarnings : [],
@@ -315,6 +324,27 @@ function normalizeMission(mission) {
   };
 }
 
+function normalizeAircraft(aircraft) {
+  const statusText = String(aircraft.status || "").toLowerCase();
+  const caps = aircraft.capabilities || {};
+  return {
+    ...aircraft,
+    id: String(aircraft.id || uid("aircraft")),
+    number: String(aircraft.number || "").trim(),
+    status: ["down", "baixada", "baixa", "indisponivel", "indisponível"].includes(statusText) ? "down" : "up",
+    capabilities: {
+      VFR: !!(caps.VFR ?? caps.vfr),
+      IFR: !!(caps.IFR ?? caps.ifr),
+      OVN: !!(caps.OVN ?? caps.ovn),
+      arm: !!(caps.arm ?? caps.armament ?? caps.armamento),
+      winch: !!(caps.winch ?? caps.guincho),
+      hook: !!(caps.hook ?? caps.gancho),
+    },
+    hdv: String(aircraft.hdv || ""),
+    details: String(aircraft.details || ""),
+  };
+}
+
 function normalizeUnavailability(item) {
   return {
     id: String(item.id || uid("unavailability")),
@@ -354,7 +384,7 @@ function appSnapshot() {
 }
 
 function applySnapshot(snapshot) {
-  state.aircraft = Array.isArray(snapshot.aircraft) ? snapshot.aircraft : [];
+  state.aircraft = Array.isArray(snapshot.aircraft) ? snapshot.aircraft.map(normalizeAircraft) : [];
   state.missions = Array.isArray(snapshot.missions) ? snapshot.missions.map(normalizeMission) : [];
   state.unavailability = Array.isArray(snapshot.unavailability) ? snapshot.unavailability.map(normalizeUnavailability) : [];
   state.sheetConfig = { ...state.sheetConfig, ...(snapshot.sheetConfig || {}) };
@@ -1043,8 +1073,7 @@ function renderAircraftSlots(preselected = null) {
   const count = Math.max(1, Number(document.getElementById("missionAircraftCount").value || 1));
   const mission = missionFormData(document.getElementById("missionId").value || "draft");
   const currentSelected = (preselected || [...document.querySelectorAll(".aircraft-select")].map((select) => select.value))
-    .map((ref) => aircraftRefId(ref))
-    .filter(Boolean);
+    .map((ref) => ref ? aircraftRefId(ref) : "");
   const slots = [];
 
   for (let index = 0; index < count; index += 1) {
@@ -1071,20 +1100,33 @@ function renderAircraftSlots(preselected = null) {
   document.querySelectorAll(".aircraft-select").forEach((select) => {
     select.addEventListener("change", () => renderAircraftSlots());
   });
-  els.availableAircraftHint.textContent = `${availableAircraftForMission(mission, []).length} disponíveis`;
+  const availableCount = availableAircraftForMission(mission, []).length;
+  const unavailableDetails = state.aircraft
+    .map((aircraft) => ({ aircraft, reason: aircraftUnavailableReason(aircraft, mission, []) }))
+    .filter((item) => item.reason)
+    .slice(0, 4)
+    .map((item) => `${item.aircraft.number}: ${item.reason}`);
+  els.availableAircraftHint.textContent = unavailableDetails.length
+    ? `${availableCount} disponíveis · ${unavailableDetails.join(" · ")}`
+    : `${availableCount} disponíveis`;
 }
 
 function availableAircraftForMission(mission, excludedIds = []) {
   // Regra principal de disponibilidade usada pelos dropdowns de aeronaves.
   return state.aircraft
-    .filter((aircraft) => aircraft.status === "up")
-    .filter((aircraft) => aircraft.capabilities[mission.flightType])
-    .filter((aircraft) => !mission.requirements.armament || aircraft.capabilities.arm)
-    .filter((aircraft) => !mission.requirements.winch || aircraft.capabilities.winch)
-    .filter((aircraft) => !mission.requirements.hook || aircraft.capabilities.hook)
-    .filter((aircraft) => !excludedIds.includes(aircraft.id))
-    .filter((aircraft) => !hasAircraftUnavailabilityConflict(aircraft.id, mission.startDate, mission.endDate))
-    .filter((aircraft) => !hasAircraftDateConflict(aircraft.id, mission));
+    .filter((aircraft) => !aircraftUnavailableReason(aircraft, mission, excludedIds));
+}
+
+function aircraftUnavailableReason(aircraft, mission, excludedIds = []) {
+  if (aircraft.status !== "up") return "baixada";
+  if (!aircraft.capabilities?.[mission.flightType]) return `sem ${mission.flightType}`;
+  if (mission.requirements.armament && !aircraft.capabilities.arm) return "sem armamento";
+  if (mission.requirements.winch && !aircraft.capabilities.winch) return "sem guincho";
+  if (mission.requirements.hook && !aircraft.capabilities.hook) return "sem gancho";
+  if (excludedIds.includes(aircraft.id)) return "já escolhida nesta missão";
+  if (hasAircraftUnavailabilityConflict(aircraft.id, mission.startDate, mission.endDate)) return "indisponível no período";
+  if (hasAircraftDateConflict(aircraft.id, mission)) return "conflito no período";
+  return "";
 }
 
 function hasAircraftUnavailabilityConflict(aircraftId, startDate, endDate) {
@@ -3291,7 +3333,7 @@ function importBackup(event) {
     try {
       const parsed = JSON.parse(reader.result);
       if (!Array.isArray(parsed.aircraft) || !Array.isArray(parsed.missions)) throw new Error("Formato inválido");
-      state.aircraft = parsed.aircraft;
+      state.aircraft = parsed.aircraft.map(normalizeAircraft);
       state.missions = parsed.missions.map(normalizeMission);
       state.unavailability = Array.isArray(parsed.unavailability) ? parsed.unavailability.map(normalizeUnavailability) : [];
       state.sheetConfig = { ...state.sheetConfig, ...(parsed.sheetConfig || {}) };
