@@ -1708,6 +1708,7 @@ function renderCalendar() {
       const pendingMission = pendingPlan.allocated.get(aircraft.id);
       const down = aircraft.status === "down";
       const rowClass = down ? "planner-aircraft-row-down" : "";
+      const aircraftTooltip = `${aircraft.number} - ${aircraft.hdv || "HDV não informada"}${down ? " - baixada" : ""}`;
       const block = unavailability
         ? renderUnavailabilityCalendarBlock(unavailability, aircraft, iso, date)
         : assignedMission
@@ -1716,8 +1717,8 @@ function renderCalendar() {
             ? renderPendingMissionCalendarBlock(pendingMission, iso, date)
             : "";
       return `
-        <div class="planner-aircraft-row ${rowClass}" title="${escapeHtml(aircraft.number)}${down ? " baixada" : ""}">
-          <span class="planner-aircraft-label">${showAircraftLabels ? escapeHtml(aircraft.number) : ""}</span>
+        <div class="planner-aircraft-row ${rowClass}" title="${escapeHtml(aircraftTooltip)}">
+          <span class="planner-aircraft-label" title="${escapeHtml(aircraftTooltip)}">${showAircraftLabels ? escapeHtml(aircraft.number) : ""}</span>
           <div class="planner-aircraft-slot">${block}</div>
         </div>
       `;
