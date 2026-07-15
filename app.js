@@ -1088,10 +1088,19 @@ function renderAircraftSlots(preselected = null) {
         return `<option value="${aircraft.id}" ${aircraft.id === selectedForSlot ? "selected" : ""}>${escapeHtml(aircraft.number)} — ${capabilities}</option>`;
       })
       .join("");
+    const disabledOptions = state.aircraft
+      .filter((aircraft) => !available.some((item) => item.id === aircraft.id))
+      .map((aircraft) => {
+        const reason = aircraftUnavailableReason(aircraft, mission, selectedInOtherSlots);
+        const capabilities = ["VFR", "IFR", "OVN"].filter((capability) => aircraft.capabilities[capability]).join(" / ") || "sem capacidade";
+        return `<option value="" disabled>${escapeHtml(aircraft.number)} — ${escapeHtml(reason || "indisponível")} — ${escapeHtml(capabilities)}</option>`;
+      })
+      .join("");
     slots.push(`
       <select class="aircraft-select" aria-label="Aeronave ${index + 1}">
         <option value="">Aeronave ${index + 1}: A definir</option>
         ${options}
+        ${disabledOptions ? `<optgroup label="Indisponíveis">${disabledOptions}</optgroup>` : ""}
       </select>
     `);
   }
@@ -1104,7 +1113,6 @@ function renderAircraftSlots(preselected = null) {
   const unavailableDetails = state.aircraft
     .map((aircraft) => ({ aircraft, reason: aircraftUnavailableReason(aircraft, mission, []) }))
     .filter((item) => item.reason)
-    .slice(0, 4)
     .map((item) => `${item.aircraft.number}: ${item.reason}`);
   els.availableAircraftHint.textContent = unavailableDetails.length
     ? `${availableCount} disponíveis · ${unavailableDetails.join(" · ")}`
