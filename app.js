@@ -1369,13 +1369,11 @@ function renderCompactAircraftAvailability(todayAvailability) {
 function renderWeeklyTimeline({ container, weekStart, weekEnd, showCancelled, expanded, isCurrentWeek, toggleButton }) {
   const missions = getMissionsOverlappingWeek(weekStart, weekEnd, showCancelled);
   const laneLayout = assignWeeklyMissionLanes(missions, weekStart, weekEnd);
-  const visibleLaneCount = expanded ? laneLayout.count : Math.min(laneLayout.count, 4);
-  const hiddenCount = missions.filter((mission) => (laneLayout.lanesByMission.get(mission.id) ?? 0) >= visibleLaneCount).length;
+  const visibleLaneCount = laneLayout.count;
   const days = dateRange(weekStart, weekEnd);
   const today = toIsoDate(new Date());
 
-  toggleButton.hidden = laneLayout.count <= 4;
-  toggleButton.textContent = expanded ? "Recolher" : `+${hiddenCount} missões`;
+  if (toggleButton) toggleButton.hidden = true;
 
   const dayHeaders = days.map((date) => {
     const dayClass = isCurrentWeek && date === today ? "timeline-today" : isCurrentWeek && date < today ? "timeline-past" : "";
@@ -1631,11 +1629,11 @@ function renderCalendar() {
     const iso = toIsoDate(date);
     const dateStateClass = iso === todayIso ? "today" : iso < todayIso ? "past-day" : "";
     const showAircraftLabels = date.getDay() === 0;
-    const pendingByAircraft = pendingMissionSlotsForDate(visibleMissions, plannerAircraft, iso);
-    const lanes = plannerAircraft.map((aircraft) => {
+    const pendingPlan = pendingMissionSlotsForDate(visibleMissions, plannerAircraft, iso);
+    const aircraftLanes = plannerAircraft.map((aircraft) => {
       const unavailability = aircraftUnavailabilityForDate(aircraft.id, iso);
       const assignedMission = visibleMissions.find((mission) => missionUsesAircraftOnDate(mission, aircraft.id, iso));
-      const pendingMission = pendingByAircraft.get(aircraft.id);
+      const pendingMission = pendingPlan.allocated.get(aircraft.id);
       const down = aircraft.status === "down";
       const rowClass = down ? "planner-aircraft-row-down" : "";
       const block = unavailability
@@ -1652,6 +1650,13 @@ function renderCalendar() {
         </div>
       `;
     }).join("");
+    const overflowLanes = pendingPlan.overflow.map((item) => `
+      <div class="planner-aircraft-row planner-aircraft-row-deficit" title="Não há aeronave disponível para esta demanda">
+        <span class="planner-aircraft-label">${showAircraftLabels ? "SEM ANV" : ""}</span>
+        <div class="planner-aircraft-slot">${renderNoAircraftAvailableCalendarBlock(item.mission, item.slot, iso, date)}</div>
+      </div>
+    `).join("");
+    const lanes = aircraftLanes + overflowLanes;
 
     return `
       <div class="day-cell ${date.getMonth() === state.currentMonth ? "" : "outside-month"} ${dateStateClass}">
@@ -1707,6 +1712,7 @@ function missionAssignedRefsForDate(mission, date) {
 
 function pendingMissionSlotsForDate(missions, aircraftRows, date) {
   const allocated = new Map();
+  const overflow = [];
   const occupiedIds = new Set();
 
   aircraftRows.forEach((aircraft) => {
@@ -1736,9 +1742,13 @@ function pendingMissionSlotsForDate(missions, aircraftRows, date) {
         occupiedIds.add(aircraft.id);
         pending -= 1;
       }
+      while (pending > 0) {
+        overflow.push({ mission, slot: pending });
+        pending -= 1;
+      }
     });
 
-  return allocated;
+  return { allocated, overflow };
 }
 
 function calendarSegmentClass(startDate, endDate, iso, date) {
@@ -1774,6 +1784,17 @@ function renderPendingMissionCalendarBlock(mission, iso, date) {
   return `
     <button class="mission-block planner-compact-block mission-segment ${segmentClass} mission-block-pending" title="${escapeHtml(`${mission.name} · ${pending} aeronave(s) a definir`)}" type="button" onclick="openMissionDetails('${mission.id}')">
       <span>${escapeHtml(shortMissionName(mission.name))} · A DEFINIR · ${pending} def.</span>
+    </button>
+  `;
+}
+
+function renderNoAircraftAvailableCalendarBlock(mission, slot, iso, date) {
+  const segmentClass = calendarSegmentClass(mission.startDate, mission.endDate, iso, date);
+  const requiredForDay = missionDemandForDate(mission, iso) || mission.aircraftRequired;
+  const tooltip = `${mission.name} · demanda sem aeronave disponível · ${requiredForDay} ANV previstas`;
+  return `
+    <button class="mission-block planner-compact-block mission-segment ${segmentClass} mission-block-deficit" title="${escapeHtml(tooltip)}" type="button" onclick="openMissionDetails('${mission.id}')">
+      <span>${escapeHtml(shortMissionName(mission.name))} · SEM ANV DISP.</span>
     </button>
   `;
 }
