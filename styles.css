@@ -974,6 +974,7 @@ legend {
 .inline-label {
   align-items: center;
   display: flex;
+  gap: 12px;
   justify-content: space-between;
   margin-bottom: 8px;
 }
@@ -981,6 +982,8 @@ legend {
 .inline-label span {
   color: var(--muted);
   font-size: 0.85rem;
+  line-height: 1.25;
+  text-align: right;
 }
 
 .aircraft-slots {
@@ -1247,6 +1250,22 @@ legend {
   min-height: 126px;
   padding: 7px 0;
   position: relative;
+}
+
+.calendar-grid .day-cell:nth-child(n + 15):nth-child(-n + 21),
+.calendar-grid .day-cell:nth-child(n + 22):nth-child(-n + 28),
+.calendar-grid .day-cell:nth-child(n + 29):nth-child(-n + 35),
+.calendar-grid .day-cell:nth-child(n + 36):nth-child(-n + 42),
+.calendar-grid .day-cell:nth-child(n + 43):nth-child(-n + 49) {
+  border-top: 4px solid #7f969b;
+}
+
+.calendar-grid .day-cell:nth-child(n + 15):nth-child(-n + 21) .day-number,
+.calendar-grid .day-cell:nth-child(n + 22):nth-child(-n + 28) .day-number,
+.calendar-grid .day-cell:nth-child(n + 29):nth-child(-n + 35) .day-number,
+.calendar-grid .day-cell:nth-child(n + 36):nth-child(-n + 42) .day-number,
+.calendar-grid .day-cell:nth-child(n + 43):nth-child(-n + 49) .day-number {
+  margin-top: -3px;
 }
 
 .day-cell:nth-child(7n),
